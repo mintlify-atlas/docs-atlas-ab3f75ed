@@ -1,0 +1,173 @@
+---
+title: "Architecture"
+description: "System design, domain model, and technical architecture of the FLL Backend"
+---
+
+## Overview
+
+The FLL Backend is a stateless REST API built with Spring Boot. It follows a classic layered architecture where HTTP requests flow through controllers into service logic, then down to JPA repositories that persist data.
+
+<CardGroup cols={3}>
+  <Card title="Controller layer" icon="arrow-down-to-line">
+    Spring Data REST automatically exposes JPA repositories as HAL/HATEOAS endpoints. Custom controllers handle domain operations such as match generation and score registration.
+  </Card>
+  <Card title="Domain layer" icon="cube">
+    Rich domain objects enforce FLL-specific business rules — maximum team sizes, unique matchmaking constraints, volunteer role validation, and edition lifecycle state transitions.
+  </Card>
+  <Card title="Repository layer" icon="database">
+    Spring Data JPA repositories provide CRUD and query operations. The `spring-security-data` integration allows repository queries to reference the authenticated principal directly.
+  </Card>
+</CardGroup>
+
+## Domain model
+
+The following entities form the core of the FLL domain. All persist to the relational database via JPA and are exposed as HAL resources.
+
+| Entity | Key fields | Description |
+|--------|-----------|-------------|
+| `Edition` | `year`, `venueName`, `description`, `state` | A single annual running of the FLL competition. Holds up to 18 teams and transitions through `DRAFT → …` lifecycle states. |
+| `Team` | `name` (PK), `city`, `foundationYear`, `category`, `inscriptionDate` | A competing team. Can have up to 10 members, up to 2 coaches, and up to 2 assigned floaters. |
+| `TeamMember` | `name`, `role`, `birthDate`, `gender`, `tShirtSize` | An individual member of a team. Birth date must be in the past. |
+| `Coach` | `name`, `emailAddress`, `phoneNumber` | A coach who can train up to 2 teams. Each team may have at most 2 coaches. |
+| `Volunteer` | `name`, `emailAddress`, `phoneNumber`, `edition` | Abstract base for all volunteer subtypes. Uses JPA joined-table inheritance. |
+| `Judge` | `expert`, `memberOfRoom` | A volunteer who evaluates scientific projects. Assigned to a `ProjectRoom`. |
+| `Referee` | `expert`, `supervisesTable` | A volunteer who oversees a `CompetitionTable`. A table holds at most 3 referees. |
+| `Floater` | `studentCode` | A student volunteer who assists teams. Each team can have at most 2 floaters. |
+| `CompetitionTable` | `id` (string PK) | A physical playing table. Owns a list of matches and up to 3 referees. |
+| `Round` | `number`, `edition` | A numbered round within an edition. Contains an ordered list of matches. |
+| `Match` | `startTime`, `endTime`, `teamA`, `teamB`, `referee`, `state` | A single head-to-head match between two teams, assigned to a round and a table. State begins as `SCHEDULED`. |
+| `MatchResult` | `score`, `match`, `team` | Records the score a team achieved in a specific match. The `(match, team)` pair is unique. |
+| `ProjectRoom` | `roomNumber`, `managedByJudge`, `panelists` | A room where judges evaluate scientific projects. Has one managing judge and a panel of additional judges. |
+| `ScientificProject` | `score`, `comments`, `team`, `edition` | A team's scientific project submission for a given edition, including judge score and comments. |
+| `Award` | `name`, `edition`, `winner` | An award granted to a team within an edition. The `(name, edition)` pair is unique. |
+| `Ranking` | `team`, `totalScore`, `position` | Aggregated competition standing for a team. Each team has exactly one ranking entry. |
+| `MediaContent` | `url` (PK), `type`, `edition` | A photo or video asset associated with an edition. |
+| `Record` | `name`, `description`, `created`, `modified`, `owner` | A generic timestamped record owned by a user. Used as a scaffold entity in the template. |
+| `User` | `username`, `password`, `email` | An authenticated user of the system who implements `UserDetails`. |
+
+## Technology stack
+
+| Technology | Version | Role |
+|------------|---------|------|
+| Java | 21 | Language and runtime |
+| Spring Boot | 4.0.1 | Application framework |
+| Spring Data REST | (Spring Boot managed) | Automatic HAL/HATEOAS endpoint exposure |
+| Spring Data JPA | (Spring Boot managed) | ORM and repository abstraction |
+| Spring HATEOAS | (Spring Boot managed) | Hypermedia link building |
+| Spring Security | (Spring Boot managed) | Authentication and authorisation |
+| spring-security-data | (Spring Boot managed) | Security expressions in repository queries |
+| Spring Boot Mail | (Spring Boot managed) | Email sending support |
+| Spring Boot Validation | (Spring Boot managed) | Bean Validation (Jakarta) |
+| HAL Explorer | (Spring Boot managed) | Browser-based API explorer at `/explorer` |
+| springdoc-openapi | 3.0.1 | OpenAPI / Swagger UI generation |
+| H2 | (Spring Boot managed) | In-memory database for development and tests |
+| PostgreSQL | (Spring Boot managed) | Relational database for production |
+| Tomcat JDBC | (Spring Boot managed) | Connection pool |
+| Lombok | 1.18.34 | Boilerplate reduction via annotation processing |
+| Jackson JSR-310 | (Spring Boot managed) | Java 8 date/time serialisation |
+| Cucumber | 7.19.0 | BDD acceptance tests |
+| JUnit Platform | 6.0.1 | Test runner |
+| Maven | 3.9+ | Build tool |
+| Checkstyle | 10.26.1 | Static analysis enforced at `package` phase |
+
+## Security
+
+The API uses **HTTP Basic authentication** over a stateless session policy (`SessionCreationPolicy.STATELESS`). CSRF protection is disabled because the API is consumed by JavaScript clients that rely on the `Authorization` header rather than cookies.
+
+### Access rules
+
+The rules below are applied in order by `WebSecurityConfig`:
+
+| Method | Path pattern | Requirement |
+|--------|-------------|-------------|
+| `GET` | `/identity` | Authenticated |
+| `GET` | `/users` | Authenticated |
+| `GET` | `/editions/*/volunteers` | Authenticated |
+| `POST` | `/users` | Anonymous (self-registration) |
+| `POST` | `/matchResults/register` | Authenticated |
+| `POST` | `/users/*` | Denied for all |
+| `POST` | `/*/*` | Authenticated |
+| `PUT` | `/*/*` | Authenticated |
+| `PATCH` | `/*/*` | Authenticated |
+| `DELETE` | `/*/*` | Authenticated |
+| All other | `/**` | Public |
+
+### CORS
+
+Allowed origins are driven by the `allowed-origins` configuration property:
+
+- **Default profile**: `http://localhost:3000`
+- **Production profile**: `https://www.firstlegoleague.win`, `https://*.vercel.app`, `http://localhost:3000`
+
+All HTTP methods (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`) and all headers are permitted. Credentials are allowed.
+
+## REST API design
+
+The FLL Backend uses **Spring Data REST** to automatically expose JPA repositories as a fully hypermedia-driven (HAL) REST API. Every response includes `_links` that describe available transitions, following the HATEOAS constraint.
+
+- **HAL Explorer** is available at `http://localhost:8080/explorer` for interactive browsing.
+- **OpenAPI / Swagger UI** is provided by `springdoc-openapi` for machine-readable API documentation.
+- Resources use standard HTTP verbs and return `application/hal+json`.
+- Pagination and sorting are handled automatically by Spring Data REST.
+
+## Database
+
+<Tabs>
+  <Tab title="Development (default)">
+    The default Spring profile uses **H2** as an in-memory database. The schema is auto-generated by Hibernate (`spring.jpa.generate-ddl` defaults to Hibernate's `ddl-auto`).
+
+    The H2 web console is **disabled by default**:
+
+    ```yaml
+    spring:
+      h2:
+        console:
+          enabled: false
+    ```
+
+    On startup, `DBInitialization` seeds a default user with username `demo` and password `password`.
+  </Tab>
+  <Tab title="Production (prod profile)">
+    Activating the `prod` Spring profile switches the datasource to **PostgreSQL** and enables DDL generation:
+
+    ```yaml
+    spring:
+      jpa:
+        generate-ddl: true
+      config:
+        activate:
+          on-profile: prod
+    ```
+
+    Logging is restricted to `error` level to reduce noise in production. Configure the datasource via the standard `spring.datasource.*` properties or a `DATABASE_URL` environment variable.
+  </Tab>
+</Tabs>
+
+## Deployment
+
+The project ships a **multi-stage Dockerfile** that produces a minimal runtime image:
+
+```dockerfile
+# Build stage
+FROM maven:3.9.12-ibm-semeru-21-noble AS build
+WORKDIR /app
+COPY pom.xml .
+RUN mvn -B -q dependency:go-offline
+COPY src ./src
+RUN mvn -B -q package -DskipTests -Dcheckstyle.skip=true
+
+# Runtime stage
+FROM ibm-semeru-runtimes:open-21-jre-noble
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
+EXPOSE 8080
+CMD ["java", "-Dspring.profiles.active=prod", "-jar", "app.jar"]
+```
+
+The build stage compiles with Maven on IBM Semeru 21. The runtime stage copies only the packaged JAR onto a lean JRE image. The container starts with the `prod` Spring profile active and listens on port **8080**.
+
+The live deployment runs on **Fly.io** at `https://spring-template.fly.dev`.
+
+<Note>
+  The Docker build skips tests (`-DskipTests`) and Checkstyle (`-Dcheckstyle.skip=true`) for speed. Run `mvn test` separately in CI before building the image to ensure the full test suite passes.
+</Note>

@@ -1,0 +1,144 @@
+---
+title: "API overview"
+description: "Base URL, authentication, response format, and common patterns"
+---
+
+## Base URLs
+
+| Environment | URL |
+|---|---|
+| Development | `http://localhost:8080` |
+| Production | `https://spring-template.fly.dev` |
+
+## Authentication
+
+The API uses **HTTP Basic authentication**. Include your credentials on every request that requires authentication.
+
+```bash
+curl -u username:password http://localhost:8080/editions
+```
+
+Unauthenticated requests to protected endpoints return `401 Unauthorized`. Requests from an authenticated user who lacks the required role return `403 Forbidden`.
+
+<Info>
+  Anonymous `GET` requests are permitted on most read-only endpoints. Write operations and sensitive reads require authentication.
+</Info>
+
+## Response format
+
+All resource responses follow the **HAL+JSON** (`application/hal+json`) hypermedia format. Each response includes a `_links` object with related resource links.
+
+```json
+{
+  "id": 1,
+  "year": 2025,
+  "venueName": "Igualada",
+  "description": "FLL 2025",
+  "state": "DRAFT",
+  "_links": {
+    "self": {
+      "href": "http://localhost:8080/editions/1"
+    },
+    "edition": {
+      "href": "http://localhost:8080/editions/1"
+    },
+    "teams": {
+      "href": "http://localhost:8080/editions/1/teams"
+    }
+  }
+}
+```
+
+Custom action endpoints (lifecycle, team registration, volunteers, tables) return plain JSON objects rather than HAL resources.
+
+## Interactive tools
+
+| Tool | URL | Description |
+|---|---|---|
+| HAL Explorer | `/explorer` | Browser-based hypermedia navigator |
+| Swagger UI | `/swagger-ui.html` | Interactive API playground |
+
+## HTTP status codes
+
+| Code | Meaning |
+|---|---|
+| `200 OK` | Request succeeded. |
+| `201 Created` | Resource created successfully. |
+| `204 No Content` | Request succeeded with no response body. |
+| `400 Bad Request` | Request body is malformed or a required field is missing. |
+| `401 Unauthorized` | Authentication credentials are missing or invalid. |
+| `403 Forbidden` | Authenticated user does not have the required role. |
+| `404 Not Found` | The requested resource does not exist. |
+| `409 Conflict` | The operation conflicts with the current resource state (e.g., duplicate registration, invalid state transition). |
+| `422 Unprocessable Entity` | The operation is not allowed given the current state of the resource. |
+
+## Error response format
+
+All error responses use a consistent JSON structure:
+
+```json
+{
+  "error": "EDITION_NOT_FOUND",
+  "message": "Edition with id 42 not found",
+  "timestamp": "2025-03-15T10:30:00.000Z",
+  "path": "/editions/42/state"
+}
+```
+
+<ResponseField name="error" type="string" required>
+  Machine-readable error code. Use this for programmatic error handling.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Human-readable description of what went wrong.
+</ResponseField>
+
+<ResponseField name="timestamp" type="string" required>
+  ISO 8601 timestamp of when the error occurred.
+</ResponseField>
+
+<ResponseField name="path" type="string" required>
+  The request path that produced the error.
+</ResponseField>
+
+<ResponseField name="details" type="object">
+  Additional structured detail. Present only when extra context is available (e.g., validation field errors).
+</ResponseField>
+
+## Pagination
+
+Collection endpoints backed by Spring Data REST support standard pagination query parameters:
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `page` | integer | `0` | Zero-based page index. |
+| `size` | integer | `20` | Number of items per page. |
+| `sort` | string | — | Sort field and direction, e.g. `year,desc`. |
+
+```bash
+curl http://localhost:8080/editions?page=0&size=10&sort=year,desc
+```
+
+Paginated responses include `_links.next`, `_links.prev`, `_links.first`, and `_links.last` where applicable, and a `page` summary object:
+
+```json
+{
+  "_links": { ... },
+  "_embedded": { "editions": [ ... ] },
+  "page": {
+    "size": 10,
+    "totalElements": 3,
+    "totalPages": 1,
+    "number": 0
+  }
+}
+```
+
+## CORS
+
+CORS is configured via the `allowed-origins` application property. Allowed methods are `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `OPTIONS`. All request headers are permitted and credentials are supported.
+
+| Environment | Allowed origins |
+|---|---|
+| Development | Typically `http://localhost:*` (configured in `application.yml`) |
+| Production | Configured at deployment time via environment variable |

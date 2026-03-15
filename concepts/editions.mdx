@@ -1,0 +1,106 @@
+---
+title: "Editions"
+description: "Understanding competition editions and their lifecycle"
+---
+
+An **edition** represents a single First Lego League competition event. Each edition is identified by a year, takes place at a named venue, and carries a description. It acts as the root container for teams, rounds, and competition tables for that event.
+
+## Edition fields
+
+| Field | Type | Constraints |
+|---|---|---|
+| `id` | `Long` | Auto-generated primary key |
+| `year` | `Integer` | Required |
+| `venueName` | `String` | Required, non-blank |
+| `description` | `String` | Required, non-blank |
+| `state` | `EditionState` | Read-only via API; defaults to `DRAFT` |
+| `teams` | `Set<Team>` | Maximum 18 teams per edition |
+
+<Note>
+The `state` field is read-only in API responses. You change it by calling the lifecycle endpoint — you cannot set it directly when creating or updating an edition.
+</Note>
+
+## State machine
+
+Every edition moves through three states. Transitions are strictly one-directional — once an edition is closed, it cannot be re-opened.
+
+```
+DRAFT ──► OPEN ──► CLOSED
+```
+
+| Current state | Allowed transition | Result |
+|---|---|---|
+| `DRAFT` | → `OPEN` | Teams can now register |
+| `OPEN` | → `CLOSED` | Registration and operations are frozen |
+| `CLOSED` | *(none)* | Terminal state — no further transitions |
+
+<Warning>
+Attempting an invalid transition (for example, `CLOSED` → `OPEN`) returns a `409 Conflict` error with the code `INVALID_EDITION_STATE_TRANSITION`.
+</Warning>
+
+### State definitions
+
+- **`DRAFT`** — The edition has been created but is not yet accepting teams. This is the default state when an edition is first created.
+- **`OPEN`** — The edition is actively accepting team registrations. The `TEAM_REGISTRATION` operation is only allowed in this state.
+- **`CLOSED`** — The edition has ended. No further team registrations or state changes are permitted.
+
+## Edition operations
+
+The `EditionOperation` enum defines the actions that are gated by edition state.
+
+| Operation | Allowed in state |
+|---|---|
+| `TEAM_REGISTRATION` | `OPEN` only |
+
+Attempting any operation outside its allowed state raises an `EDITION_OPERATION_NOT_ALLOWED` error.
+
+## Typical edition workflow
+
+<Steps>
+  <Step title="Create the edition">
+    Create an edition with the competition year, venue name, and description. The edition starts in the `DRAFT` state.
+
+    ```json
+    {
+      "year": 2025,
+      "venueName": "Igualada Sports Center",
+      "description": "FLL 2025 Regional Championship"
+    }
+    ```
+  </Step>
+
+  <Step title="Open registration">
+    Transition the edition to `OPEN` by calling the lifecycle endpoint with the target state. Teams can now register.
+
+    ```http
+    PATCH /editions/{id}/state
+    { "targetState": "OPEN" }
+    ```
+
+    The response includes `previousState` and `newState` to confirm the transition.
+  </Step>
+
+  <Step title="Register teams">
+    With the edition in the `OPEN` state, register up to 18 teams. Attempting to register a 19th team or registering to a non-`OPEN` edition will be rejected.
+  </Step>
+
+  <Step title="Set up rounds and tables">
+    Create `Round` records and `CompetitionTable` records scoped to the edition. These serve as the scheduling containers for matches.
+  </Step>
+
+  <Step title="Close the edition">
+    When the event ends, transition the edition to `CLOSED`. This is a terminal action.
+
+    ```http
+    PATCH /editions/{id}/state
+    { "targetState": "CLOSED" }
+    ```
+  </Step>
+</Steps>
+
+## Relationships
+
+- **Teams** — An edition holds a many-to-many set of teams, capped at 18. The join table is `edition_teams`.
+- **Rounds** — Rounds reference an edition via a foreign key. Rounds group the matches that take place during the event.
+- **CompetitionTables** — Physical playing tables used in the venue. Tables are referenced by matches.
+- **Volunteers** — Each volunteer (judge, referee, floater) belongs to a single edition via the `edition_id` foreign key on the `volunteers` table.

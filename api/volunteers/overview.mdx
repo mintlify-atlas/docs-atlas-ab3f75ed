@@ -1,0 +1,151 @@
+---
+title: "Volunteers API"
+description: "Manage FLL competition volunteers"
+---
+
+Volunteers participate in the competition in one of three specialised roles. All three types share common fields and are exposed through separate Spring Data REST endpoints.
+
+## Volunteer types
+
+| Type | REST path | Description |
+|---|---|---|
+| `Judge` | `/judges` | Evaluates scientific projects. Can be assigned as room manager or panelist in a project room. Has an `expert` flag. |
+| `Referee` | `/referees` | Officiates robot game matches. Can be assigned to matches. Has an `expert` flag and optionally supervises a competition table. |
+| `Floater` | `/floaters` | Provides flexible support to up to 2 teams. Identified by a unique `studentCode`. |
+
+All three types extend the base `Volunteer` entity and share the following fields.
+
+## Common volunteer fields
+
+<ResponseField name="id" type="integer">
+  Auto-generated numeric identifier.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Full name of the volunteer. Required.
+</ResponseField>
+
+<ResponseField name="emailAddress" type="string">
+  Unique email address. Required.
+</ResponseField>
+
+<ResponseField name="phoneNumber" type="string">
+  Contact phone number. Required.
+</ResponseField>
+
+<ResponseField name="edition" type="link">
+  The competition edition the volunteer is participating in.
+</ResponseField>
+
+## Type-specific fields
+
+### Judge
+
+| Field | Type | Description |
+|---|---|---|
+| `expert` | boolean | Whether the judge has expert status |
+| `memberOfRoom` | link | Project room the judge belongs to |
+
+### Referee
+
+| Field | Type | Description |
+|---|---|---|
+| `expert` | boolean | Whether the referee has expert status |
+| `supervisesTable` | link | Competition table this referee supervises |
+
+### Floater
+
+| Field | Type | Description |
+|---|---|---|
+| `studentCode` | string | Unique student identifier code. Required. |
+| `assistedTeams` | collection | Teams this floater supports (max 2) |
+
+## Volunteer summary response
+
+Several endpoints return a lightweight summary object instead of the full HAL resource:
+
+<ResponseField name="id" type="integer">
+  Volunteer identifier.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Volunteer name.
+</ResponseField>
+
+<ResponseField name="emailAddress" type="string">
+  Email address.
+</ResponseField>
+
+<ResponseField name="phoneNumber" type="string">
+  Phone number.
+</ResponseField>
+
+## CRUD endpoints
+
+Spring Data REST exposes standard CRUD operations for all three volunteer types.
+
+<Note>
+  Authentication is required for write operations.
+</Note>
+
+### List volunteers
+
+```bash
+# Judges
+curl -X GET 'http://localhost:8080/judges'
+
+# Referees
+curl -X GET 'http://localhost:8080/referees'
+
+# Floaters
+curl -X GET 'http://localhost:8080/floaters'
+```
+
+### Create a referee
+
+```bash
+curl -X POST 'http://localhost:8080/referees' \
+  -H 'Content-Type: application/json' \
+  -u admin:password \
+  -d '{
+    "name": "Maria Garcia",
+    "emailAddress": "m.garcia@fll.cat",
+    "phoneNumber": "+34600000001"
+  }'
+```
+
+### Create a judge
+
+```bash
+curl -X POST 'http://localhost:8080/judges' \
+  -H 'Content-Type: application/json' \
+  -u admin:password \
+  -d '{
+    "name": "Pau Soler",
+    "emailAddress": "p.soler@fll.cat",
+    "phoneNumber": "+34600000002",
+    "expert": true
+  }'
+```
+
+### Create a floater
+
+```bash
+curl -X POST 'http://localhost:8080/floaters' \
+  -H 'Content-Type: application/json' \
+  -u admin:password \
+  -d '{
+    "name": "Anna Puig",
+    "emailAddress": "a.puig@fll.cat",
+    "phoneNumber": "+34600000003",
+    "studentCode": "STU-2024-042"
+  }'
+```
+
+## Role conflict validation
+
+<Warning>
+  A volunteer is stored as exactly one subtype. You cannot assign a `Judge` as a referee to a match, and you cannot assign a `Referee` to a project room as a judge. Attempting to use a volunteer in the wrong role returns a `422 INVALID_ROLE` error.
+</Warning>
+
+A `Floater` cannot be assigned as a referee to a match — the assignment service checks that the resolved volunteer is an instance of `Referee`.

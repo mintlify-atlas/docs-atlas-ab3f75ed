@@ -1,0 +1,141 @@
+---
+title: "Deployment"
+description: "Deploy the FLL Backend with Docker to production"
+---
+
+## Docker
+
+The project ships a multi-stage `Dockerfile` that produces a lean production image.
+
+### How the Dockerfile works
+
+```dockerfile
+# Build stage
+FROM maven:3.9.12-ibm-semeru-21-noble AS build
+WORKDIR /app
+COPY pom.xml .
+RUN mvn -B -q dependency:go-offline
+COPY src ./src
+RUN mvn -B -q package -DskipTests -Dcheckstyle.skip=true
+
+# Runtime stage
+FROM ibm-semeru-runtimes:open-21-jre-noble
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
+EXPOSE 8080
+CMD ["java", "-Dspring.profiles.active=prod", "-jar", "app.jar"]
+```
+
+| Stage   | Base image                              | Purpose                                     |
+| ------- | --------------------------------------- | ------------------------------------------- |
+| Build   | `maven:3.9.12-ibm-semeru-21-noble`      | Resolves dependencies and compiles the JAR  |
+| Runtime | `ibm-semeru-runtimes:open-21-jre-noble` | Minimal JRE image that runs the application |
+
+Tests and checkstyle are skipped in the Docker build to keep image build times fast. The CI pipeline runs the full test suite separately.
+
+### Build the image
+
+```bash
+docker build -t fll-backend .
+```
+
+### Run the container
+
+```bash
+docker run -p 8080:8080 fll-backend
+```
+
+The container starts with `-Dspring.profiles.active=prod` baked into the `CMD`, so the `prod` Spring profile is active by default.
+
+To override the active profile:
+
+```bash
+docker run -p 8080:8080 -e SPRING_PROFILES_ACTIVE=prod fll-backend
+```
+
+## Production profile
+
+When the `prod` profile is active, the following configuration applies (from `application.yml`):
+
+```yaml
+spring:
+  jpa:
+    generate-ddl: true
+  config:
+    activate:
+      on-profile: prod
+
+allowed-origins: "https://www.firstlegoleague.win,https://*.vercel.app,http://localhost:3000"
+
+logging:
+  level:
+    org:
+      hibernate: error
+      springframework.core: error
+      springframework.web: error
+    root: error
+```
+
+| Setting           | Value                                                                 | Notes                                      |
+| ----------------- | --------------------------------------------------------------------- | ------------------------------------------ |
+| `allowed-origins` | `firstlegoleague.win`, `*.vercel.app`, `localhost:3000`               | CORS origins allowed in production         |
+| `generate-ddl`    | `true`                                                                | JPA creates/updates schema on startup      |
+| Logging           | `error` for Hibernate, Spring core, Spring web, and root              | Suppresses verbose framework output        |
+
+### PostgreSQL
+
+The `prod` profile is intended to run against a **PostgreSQL** database. Supply the connection details via environment variables understood by Spring Boot:
+
+```bash
+docker run -p 8080:8080 \
+  -e SPRING_DATASOURCE_URL=jdbc:postgresql://<host>:<port>/<database> \
+  -e SPRING_DATASOURCE_USERNAME=<user> \
+  -e SPRING_DATASOURCE_PASSWORD=<password> \
+  fll-backend
+```
+
+## Environment variables
+
+| Variable                      | Required | Description                                             |
+| ----------------------------- | -------- | ------------------------------------------------------- |
+| `SPRING_PROFILES_ACTIVE`      | No       | Set to `prod` (already set in the Docker `CMD`)         |
+| `SPRING_DATASOURCE_URL`       | Yes      | JDBC URL for the PostgreSQL database                    |
+| `SPRING_DATASOURCE_USERNAME`  | Yes      | Database user                                           |
+| `SPRING_DATASOURCE_PASSWORD`  | Yes      | Database password                                       |
+
+## CI/CD
+
+The repository uses a **GitHub Actions** workflow defined in `.github/workflows/ci-cd.yml`. It runs on every push and pull request targeting `main`:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: 21
+          distribution: 'temurin'
+
+      - name: Build with Maven and run tests
+        run: mvn -B package --file pom.xml
+        env:
+          CUCUMBER_PUBLISH_ENABLED: true
+
+      - name: Verify docker build
+        run: docker build .
+```
+
+The pipeline:
+1. Builds the project with `mvn package`, which runs the full test suite and checkstyle.
+2. Publishes Cucumber test reports (enabled via `CUCUMBER_PUBLISH_ENABLED=true`).
+3. Verifies that the Docker image builds successfully.
+
+## Live deployment
+
+The current production deployment is available at **[https://spring-template.fly.dev](https://spring-template.fly.dev)**.
+
+Deployment status is monitored and visible via the badge in the repository README.

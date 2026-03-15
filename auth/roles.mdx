@@ -1,0 +1,93 @@
+---
+title: "Roles and permissions"
+description: "Role-based access control in the FLL Backend"
+---
+
+The FLL Backend uses Spring Security's role-based access control. Every registered user is automatically assigned the `ROLE_USER` authority. A separate `ROLE_ADMIN` authority grants elevated access to administrative operations.
+
+## Roles
+
+<CardGroup cols={2}>
+  <Card title="User" icon="user">
+    Any registered account. Can view competition data and post comments. Assigned automatically on registration.
+  </Card>
+  <Card title="Admin" icon="shield">
+    Elevated authority for organizers. Can create and manage editions, teams, venues, volunteers, matches, and rounds.
+  </Card>
+</CardGroup>
+
+### Role assignment
+
+All users receive `ROLE_USER` automatically. The authority list is defined directly on the `User` entity:
+
+```java
+// From User.java
+@Override
+public Collection<? extends GrantedAuthority> getAuthorities() {
+    return AuthorityUtils.commaSeparatedStringToAuthorityList("ROLE_USER");
+}
+```
+
+<Note>
+  There is no self-service way to gain `ROLE_ADMIN`. Admin accounts must be provisioned directly by whoever manages the deployment (e.g. via database seed data or the `default-password` property in `application.yml`).
+</Note>
+
+## Permission table
+
+The table below maps each capability to the required role, derived from the authorization rules in `WebSecurityConfig` and the acceptance-test feature files.
+
+| Capability | User | Admin |
+|---|:---:|:---:|
+| Register an account | ✓ | ✓ |
+| View own identity (`GET /identity`) | ✓ | ✓ |
+| View user list (`GET /users`) | ✓ | ✓ |
+| View matches and match results | ✓ | ✓ |
+| View scores and leaderboard rankings | ✓ | ✓ |
+| View gallery / media content | ✓ | ✓ |
+| Post comments | ✓ | ✓ |
+| View team profiles | ✓ | ✓ |
+| View edition volunteers (`GET /editions/*/volunteers`) | ✓ | ✓ |
+| Register match results (`POST /matchResults/register`) | ✓ | ✓ |
+| Create / update / delete teams | — | ✓ |
+| Create / update / delete centers | — | ✓ |
+| Manage volunteers (assign judges, referees, floaters) | — | ✓ |
+| Manage project rooms | — | ✓ |
+| View assessments | — | ✓ |
+| Generate and assign matches | — | ✓ |
+| Manage competition tables and rounds | — | ✓ |
+| Validate volunteer role conflicts | — | ✓ |
+| Advance edition lifecycle states | — | ✓ |
+
+## Security rules in detail
+
+The rules below come directly from `WebSecurityConfig.java`.
+
+```java
+http.authorizeHttpRequests(auth -> auth
+    .requestMatchers(HttpMethod.GET,  "/identity")                 .authenticated()
+    .requestMatchers(HttpMethod.GET,  "/users")                    .authenticated()
+    .requestMatchers(HttpMethod.GET,  "/editions/*/volunteers")    .authenticated()
+    .requestMatchers(HttpMethod.POST, "/users")                    .anonymous()
+    .requestMatchers(HttpMethod.POST, "/matchResults/register")    .authenticated()
+    .requestMatchers(HttpMethod.POST, "/users/*")                  .denyAll()
+    .requestMatchers(HttpMethod.POST, "/*/*")                      .authenticated()
+    .requestMatchers(HttpMethod.PUT,  "/*/*")                      .authenticated()
+    .requestMatchers(HttpMethod.PATCH,"/*/*")                      .authenticated()
+    .requestMatchers(HttpMethod.DELETE,"/*/*")                     .authenticated()
+    .anyRequest().permitAll());
+```
+
+Key points:
+
+- `POST /users` is the only write endpoint accessible without credentials.
+- `POST /users/*` (e.g. sub-resource modification on an existing user) is explicitly denied for all callers.
+- All other `POST`, `PUT`, `PATCH`, and `DELETE` requests on nested paths (`/*/*`) require authentication.
+- Unmatched requests (simple `GET` calls on top-level collection resources) are permitted to all callers.
+
+## Method-level security
+
+In addition to URL-level rules, the application enables `@EnableMethodSecurity`, which allows individual repository or service methods to be annotated with `@PreAuthorize` or `@PostAuthorize` expressions. This is how finer-grained admin-only operations are enforced beyond the URL patterns above.
+
+<Tip>
+  Use `GET /identity` to check what role the currently authenticated user holds. The response includes the `authorities` array showing the granted roles.
+</Tip>

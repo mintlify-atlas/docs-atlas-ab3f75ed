@@ -1,0 +1,84 @@
+---
+title: "Edition team registration"
+description: "Register and remove teams from an edition"
+---
+
+Teams are registered to an edition during the `OPEN` state. An edition accepts a maximum of **18 teams**. Registration is idempotent only in the sense that attempting to register the same team twice returns an error — there is no silent no-op.
+
+<Info>
+  Team registration requires the edition to be in the `OPEN` state. Attempting to register a team when the edition is in `DRAFT` or `CLOSED` returns `422 Unprocessable Entity`.
+</Info>
+
+---
+
+## Register a team to an edition
+
+```
+POST /editions/{editionId}/teams/{teamId}
+```
+
+Registers an existing team to an existing edition. The edition must be in the `OPEN` state.
+
+**Authentication required.** Any authenticated user can register a team.
+
+### Path parameters
+
+<ParamField path="editionId" type="integer" required>
+  The numeric ID of the edition.
+</ParamField>
+
+<ParamField path="teamId" type="string" required>
+  The string identifier of the team (e.g., `"LegoStars"`).
+</ParamField>
+
+### Response
+
+Returns `201 Created` with a JSON confirmation body.
+
+<ResponseField name="editionId" type="string" required>
+  The ID of the edition the team was registered to.
+</ResponseField>
+
+<ResponseField name="teamId" type="string" required>
+  The ID of the registered team.
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+  Always `"REGISTERED"` on success.
+</ResponseField>
+
+### Example
+
+<Tabs>
+  <Tab title="Request">
+    ```bash
+    curl -X POST http://localhost:8080/editions/1/teams/LegoStars \
+      -u username:password
+    ```
+  </Tab>
+  <Tab title="Response">
+    ```json
+    {
+      "editionId": "1",
+      "teamId": "LegoStars",
+      "status": "REGISTERED"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Errors
+
+| Error code | HTTP status | Cause |
+|---|---|---|
+| `EDITION_NOT_FOUND` | `404` | No edition exists with the given `editionId`. |
+| `TEAM_NOT_FOUND` | `404` | No team exists with the given `teamId`. |
+| `TEAM_ALREADY_REGISTERED` | `409` | The team is already registered in this edition. |
+| `MAX_TEAMS_REACHED` | `409` | The edition already has 18 teams registered. |
+| `EDITION_OPERATION_NOT_ALLOWED` | `422` | Team registration is not allowed in the current edition state (`DRAFT` or `CLOSED`). |
+
+### Validation rules
+
+- The edition must be in the `OPEN` state. Both `DRAFT` and `CLOSED` reject registrations with `EDITION_OPERATION_NOT_ALLOWED`.
+- A team can only appear once per edition. Duplicate registrations return `TEAM_ALREADY_REGISTERED`.
+- The per-edition team cap is 18. Concurrent requests that push past this limit both race for the last slot; only one succeeds and the other receives `MAX_TEAMS_REACHED`.

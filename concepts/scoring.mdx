@@ -1,0 +1,160 @@
+---
+title: "Scoring and rankings"
+description: "How match scores, rankings, and leaderboards work"
+---
+
+Scoring in the FLL system is built from three layers: **match results** (per-match scores for each team), **rankings** (a team's aggregate position), and the **leaderboard** (a paginated, edition-scoped view of rankings). The `Record` and `Award` entities capture additional recognition beyond placement.
+
+## Match results
+
+A `MatchResult` links one team to one match and records the score that team achieved. Each match produces two result entries — one per team.
+
+| Field | Type | Constraints |
+|---|---|---|
+| `id` | `Long` | Auto-generated primary key |
+| `score` | `Integer` | Required; must be ≥ 0 |
+| `match` | `Match` | Required; referenced by ID in API responses |
+| `team` | `Team` | Required; referenced by ID in API responses |
+
+The combination of `match_id` and `team_name` is unique — a team can only have one result per match.
+
+### Score registration rules
+
+Scores are registered through a dedicated endpoint rather than through the standard REST resource. Direct `POST` to `/matchResults` is disabled (`405 Method Not Allowed`).
+
+```http
+POST /matches/{matchId}/registerScore
+{
+  "teamAId": "RoboTeam",
+  "teamBId": "CircuitBreakers",
+  "teamAScore": 120,
+  "teamBScore": 95
+}
+```
+
+<Warning>
+Score registration is only allowed on matches in the `FINISHED` state. Attempting registration on a non-finished match returns `409 Conflict` with code `MATCH_NOT_FINISHED`.
+</Warning>
+
+**Validation rules for score registration:**
+
+| Rule | Error code | HTTP status |
+|---|---|---|
+| Match must exist | `MATCH_NOT_FOUND` | 404 |
+| Match must be `FINISHED` | `MATCH_NOT_FINISHED` | 409 |
+| Match `endTime` must be after `startTime` | `INVALID_MATCH_STATE` | 409 |
+| Result already registered for this match | `RESULT_ALREADY_EXISTS` | 409 |
+| `teamAId` and `teamBId` must match the teams in the match | `TEAM_MISMATCH` | 422 |
+| `teamAId` and `teamBId` must be different | `INVALID_SCORE` | 422 |
+| Scores must be ≥ 0 | `INVALID_SCORE` | 422 |
+| Payload must be non-null and well-formed | `INVALID_SCORE_PAYLOAD` | 400 |
+
+## Rankings
+
+A `Ranking` represents a team's aggregate standing within an edition.
+
+| Field | Type | Constraints |
+|---|---|---|
+| `id` | `Long` | Auto-generated primary key |
+| `team` | `Team` | One ranking per team (unique on `team_name`) |
+| `totalScore` | `Integer` | Must be ≥ 0 |
+| `position` | `Integer` | Must be ≥ 1 |
+
+## Leaderboard
+
+The leaderboard is a paginated, read-only view of match results aggregated by team for a given edition. It is computed at query time by `LeaderboardService`, which delegates to the `MatchResultRepository` for the aggregation query.
+
+### Fetching the leaderboard
+
+```http
+GET /editions/{editionId}/leaderboard?page=0&size=20
+```
+
+### Pagination rules
+
+| Parameter | Valid range | Default |
+|---|---|---|
+| `page` | ≥ 0 | `0` |
+| `size` | 1–100 | *(caller-supplied)* |
+
+Values outside these ranges return `400 Bad Request`.
+
+### Response structure
+
+The response is a `LeaderboardPageResponse`:
+
+```json
+{
+  "editionId": 1,
+  "page": 0,
+  "size": 20,
+  "totalElements": 12,
+  "items": [
+    {
+      "position": 1,
+      "teamId": "RoboTeam",
+      "teamName": "RoboTeam",
+      "totalScore": 485,
+      "matchesPlayed": 4
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `editionId` | `Long` | The edition being queried |
+| `page` | `int` | Zero-based page index |
+| `size` | `int` | Number of entries per page |
+| `totalElements` | `long` | Total number of teams with results |
+| `items` | `List` | Ordered list of leaderboard entries |
+
+Each item in `items` is a `LeaderboardItemResponse`:
+
+| Field | Type | Description |
+|---|---|---|
+| `position` | `int` | 1-based rank on this page; computed as `page × size + index + 1` |
+| `teamId` | `String` | Team primary key |
+| `teamName` | `String` | Human-readable team name |
+| `totalScore` | `Long` | Sum of all match scores for the team in the edition |
+| `matchesPlayed` | `Long` | Number of match results registered for the team |
+
+<Note>
+Positions are calculated client-side from the page offset. A team's absolute rank is only meaningful when you request pages in order from page 0 and the underlying data has not changed between requests.
+</Note>
+
+## Records
+
+A `Record` is a named achievement entry that can be associated with a user (owner).
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `Long` | Auto-generated |
+| `name` | `String` | Required, non-blank |
+| `description` | `String` | Optional |
+| `created` | `ZonedDateTime` | Timestamp of creation |
+| `modified` | `ZonedDateTime` | Timestamp of last modification |
+| `owner` | `User` | The user who owns the record |
+
+## Awards
+
+An `Award` represents a named recognition given to a specific team within a specific edition. Each award name is unique per edition.
+
+| Field | Type | Constraints |
+|---|---|---|
+| `id` | `Long` | Auto-generated |
+| `name` | `String` | Required, non-blank; unique within an edition |
+| `edition` | `Edition` | The edition granting the award |
+| `winner` | `Team` | The team receiving the award |
+
+```json
+{
+  "name": "Best Robot Design",
+  "edition": 1,
+  "winner": "RoboTeam"
+}
+```
+
+<Tip>
+Awards are independent of the numeric leaderboard. You can grant multiple distinct awards to different teams in the same edition, and the same team can win more than one award.
+</Tip>

@@ -1,0 +1,172 @@
+---
+title: "Teams API"
+description: "Manage FLL competition teams"
+---
+
+Teams are the core entity of the FLL competition. Each team belongs to an educational center, competes in a category, and participates in one or more editions.
+
+Team resources are exposed automatically by Spring Data REST at `/teams`.
+
+<Note>
+  Authentication is required for write operations (`POST`, `PUT`, `PATCH`, `DELETE`). Read operations are publicly accessible.
+</Note>
+
+## Team fields
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `name` | string | 3–50 chars, unique | Team identifier and primary key |
+| `city` | string | max 100 chars | City the team represents |
+| `foundationYear` | integer | ≥ 1998 | Year the team was founded |
+| `educationalCenter` | string | max 100 chars | Name of the school or institution (optional) |
+| `category` | string | required | Competition category |
+| `inscriptionDate` | date | past or present | Date the team registered; set automatically on creation |
+
+## List teams
+
+`GET /teams`
+
+Returns a paginated HAL collection of all teams.
+
+**Query parameters**
+
+<ParamField query="page" type="integer" default="0">
+  Zero-based page index.
+</ParamField>
+
+<ParamField query="size" type="integer" default="20">
+  Number of items per page.
+</ParamField>
+
+<ParamField query="sort" type="string">
+  Sort expression, e.g. `name,asc`.
+</ParamField>
+
+<Tabs>
+  <Tab title="Request">
+    ```bash
+    curl -X GET 'http://localhost:8080/teams?page=0&size=10' \
+      -H 'Accept: application/hal+json'
+    ```
+  </Tab>
+  <Tab title="Response">
+    ```json
+    {
+      "_embedded": {
+        "teams": [
+          {
+            "name": "RoboStars",
+            "city": "Barcelona",
+            "foundationYear": 2015,
+            "educationalCenter": "Institut Escola Mediterrani",
+            "category": "FLL Challenge",
+            "inscriptionDate": "2024-09-01",
+            "_links": {
+              "self": { "href": "http://localhost:8080/teams/RoboStars" },
+              "team": { "href": "http://localhost:8080/teams/RoboStars" }
+            }
+          }
+        ]
+      },
+      "_links": {
+        "self": { "href": "http://localhost:8080/teams?page=0&size=10" }
+      },
+      "page": { "size": 10, "totalElements": 1, "totalPages": 1, "number": 0 }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Create a team
+
+`POST /teams`
+
+Creates a new team. The `name` field serves as the primary key and must be unique.
+
+**Request body**
+
+<ParamField body="name" type="string" required>
+  Unique team name. Between 3 and 50 characters.
+</ParamField>
+
+<ParamField body="city" type="string" required>
+  City the team represents. Maximum 100 characters.
+</ParamField>
+
+<ParamField body="foundationYear" type="integer" required>
+  Year the team was founded. Must be 1998 or later.
+</ParamField>
+
+<ParamField body="educationalCenter" type="string">
+  Name of the school or institution. Maximum 100 characters.
+</ParamField>
+
+<ParamField body="category" type="string" required>
+  Competition category (e.g. `"FLL Challenge"`, `"FLL Explore"`).
+</ParamField>
+
+<Tabs>
+  <Tab title="Request">
+    ```bash
+    curl -X POST 'http://localhost:8080/teams' \
+      -H 'Content-Type: application/json' \
+      -u admin:password \
+      -d '{
+        "name": "RoboStars",
+        "city": "Barcelona",
+        "foundationYear": 2015,
+        "educationalCenter": "Institut Escola Mediterrani",
+        "category": "FLL Challenge"
+      }'
+    ```
+  </Tab>
+  <Tab title="Response">
+    ```json
+    {
+      "name": "RoboStars",
+      "city": "Barcelona",
+      "foundationYear": 2015,
+      "educationalCenter": "Institut Escola Mediterrani",
+      "category": "FLL Challenge",
+      "inscriptionDate": "2025-03-15",
+      "_links": {
+        "self": { "href": "http://localhost:8080/teams/RoboStars" },
+        "team": { "href": "http://localhost:8080/teams/RoboStars" }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Retrieve a team
+
+`GET /teams/{name}`
+
+```bash
+curl -X GET 'http://localhost:8080/teams/RoboStars' \
+  -H 'Accept: application/hal+json'
+```
+
+## Update a team
+
+`PUT /teams/{name}` replaces the entire team resource. `PATCH /teams/{name}` applies a partial update.
+
+```bash
+curl -X PATCH 'http://localhost:8080/teams/RoboStars' \
+  -H 'Content-Type: application/json' \
+  -u admin:password \
+  -d '{"city": "Girona"}'
+```
+
+## Delete a team
+
+`DELETE /teams/{name}`
+
+<Warning>
+  Deleting a team removes all associated memberships and coach links. This action cannot be undone.
+</Warning>
+
+```bash
+curl -X DELETE 'http://localhost:8080/teams/RoboStars' \
+  -u admin:password
+```

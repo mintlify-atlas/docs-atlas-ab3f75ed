@@ -1,0 +1,86 @@
+---
+title: "Coach assignment"
+description: "Assign coaches to teams"
+---
+
+Use this endpoint to create a relationship between an existing coach and an existing team. A coach can train at most **2 teams**, and a team can have at most **2 coaches**.
+
+<Note>
+  Authentication is required.
+</Note>
+
+## Assign a coach
+
+`POST /teams/assign-coach`
+
+**Request body**
+
+<ParamField body="teamId" type="string" required>
+  The name (primary key) of the team to assign the coach to.
+</ParamField>
+
+<ParamField body="coachId" type="integer" required>
+  The numeric ID of the coach to assign.
+</ParamField>
+
+**Response body**
+
+<ResponseField name="teamId" type="string">
+  The name of the team.
+</ResponseField>
+
+<ResponseField name="coachId" type="integer">
+  The ID of the assigned coach.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Always `"ASSIGNED"` on success.
+</ResponseField>
+
+<Tabs>
+  <Tab title="Request">
+    ```bash
+    curl -X POST 'http://localhost:8080/teams/assign-coach' \
+      -H 'Content-Type: application/json' \
+      -u admin:password \
+      -d '{
+        "teamId": "RoboStars",
+        "coachId": 7
+      }'
+    ```
+  </Tab>
+  <Tab title="Response">
+    ```json
+    {
+      "teamId": "RoboStars",
+      "coachId": 7,
+      "status": "ASSIGNED"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Error codes
+
+| HTTP status | Error code | Description |
+|---|---|---|
+| 400 | `INVALID_ASSIGN_COACH_REQUEST` | The request body is malformed or missing required fields. |
+| 404 | `TEAM_NOT_FOUND` | No team exists with the given `teamId`. |
+| 404 | `COACH_NOT_FOUND` | No coach exists with the given `coachId`. |
+| 409 | `COACH_ALREADY_ASSIGNED` | The coach is already assigned to this team. |
+| 409 | `MAX_COACHES_PER_TEAM_REACHED` | The team already has 2 coaches. No more can be added. |
+| 409 | `MAX_TEAMS_PER_COACH_REACHED` | The coach is already training 2 teams. |
+
+**Error response shape**
+
+```json
+{
+  "errorCode": "TEAM_NOT_FOUND",
+  "message": "Team not found",
+  "path": "/teams/assign-coach"
+}
+```
+
+<Warning>
+  A team can have at most 2 coaches and a coach can train at most 2 teams. Both limits are enforced at the time of assignment.
+</Warning>

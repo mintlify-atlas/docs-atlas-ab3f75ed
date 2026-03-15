@@ -1,0 +1,120 @@
+---
+title: "Authentication overview"
+description: "How authentication works in the FLL Backend API"
+---
+
+The FLL Backend uses **HTTP Basic authentication**. Every request that requires authentication must include an `Authorization` header containing a Base64-encoded `username:password` string. The server is stateless — no session cookies or tokens are issued.
+
+## How HTTP Basic works
+
+When you send a request with HTTP Basic credentials, the client encodes `username:password` in Base64 and attaches it to the `Authorization` header:
+
+```
+Authorization: Basic <base64(username:password)>
+```
+
+Most HTTP clients (curl, HTTPie, libraries) handle this encoding for you automatically.
+
+<Note>
+  The API is configured with the realm name `demo`. Sessions are never created — `SessionCreationPolicy.STATELESS` is enforced on every request.
+</Note>
+
+## Authenticated vs unauthenticated requests
+
+The following endpoints are open to unauthenticated callers:
+
+- `POST /users` — Register a new account (see [User registration](/auth/registration))
+- `GET` requests to most read-only resources (e.g. public match and team data)
+
+All write operations (`POST`, `PUT`, `PATCH`, `DELETE` on `/*/*`) and sensitive reads (e.g. `GET /identity`, `GET /users`, `GET /editions/*/volunteers`) require a valid authenticated user.
+
+<Warning>
+  Attempting a protected request without credentials — or with invalid credentials — returns `401 Unauthorized`. A valid but insufficiently authorized request returns `403 Forbidden`.
+</Warning>
+
+## Making an authenticated request
+
+<Tabs>
+  <Tab title="curl">
+    Pass credentials with the `-u` flag. curl encodes them automatically.
+
+    ```bash
+    curl -u alice:mysecretpass \
+      https://spring-template.fly.dev/identity
+    ```
+
+    You can also pass the full `Authorization` header manually:
+
+    ```bash
+    curl -H "Authorization: Basic $(echo -n alice:mysecretpass | base64)" \
+      https://spring-template.fly.dev/identity
+    ```
+  </Tab>
+  <Tab title="HTTPie">
+    Pass credentials after the URL with the `username:password` syntax.
+
+    ```bash
+    http -a alice:mysecretpass GET https://spring-template.fly.dev/identity
+    ```
+  </Tab>
+</Tabs>
+
+### Successful response
+
+```json
+{
+  "id": "alice",
+  "email": "alice@example.com",
+  "_links": {
+    "self": {
+      "href": "https://spring-template.fly.dev/users/alice"
+    }
+  }
+}
+```
+
+### Unauthenticated response (401)
+
+```bash
+curl https://spring-template.fly.dev/identity
+```
+
+```json
+{
+  "timestamp": "2024-01-15T10:30:00.000+00:00",
+  "status": 401,
+  "error": "Unauthorized",
+  "path": "/identity"
+}
+```
+
+## Verifying your identity
+
+Once authenticated, call `GET /identity` to retrieve the currently logged-in user's profile. This endpoint is useful for confirming that your credentials are accepted and for resolving your user resource URL.
+
+```bash
+curl -u alice:mysecretpass https://spring-template.fly.dev/identity
+```
+
+The response is the full user resource, including a `_links.self` URL that points to your user record at `/users/{username}`.
+
+## HAL Explorer
+
+For browser-based exploration of the API, a HAL Explorer is available at `/explorer`. It provides a point-and-click interface for navigating hypermedia links and sending requests.
+
+<Tip>
+  When using the HAL Explorer, click the small person icon in the top-right corner to enter your username and password. The Explorer then includes HTTP Basic credentials on every subsequent request.
+</Tip>
+
+The production Explorer is at `https://spring-template.fly.dev/explorer`.
+
+## CORS
+
+Cross-origin requests are allowed from the following origins:
+
+| Profile | Allowed origins |
+|---|---|
+| Development | `http://localhost:3000` |
+| Production | `https://www.firstlegoleague.win`, `https://*.vercel.app`, `http://localhost:3000` |
+
+Credentials (the `Authorization` header) are permitted in cross-origin requests.

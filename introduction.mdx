@@ -1,0 +1,76 @@
+---
+title: "Introduction"
+description: "A Spring Boot REST API for managing First Lego League competition logistics — teams, matches, scoring, volunteers, and more."
+---
+
+# First Lego League Backend
+
+The FLL Backend is a RESTful API built with Spring Boot that powers the competition management platform for [First Lego League](https://www.firstlegoleague.win) Igualada events. It provides a complete backend for organizers, volunteers, coaches, and participants to coordinate every aspect of an FLL competition.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get the API running locally in minutes
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/architecture">
+    Understand the system design and domain model
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore every endpoint with examples
+  </Card>
+  <Card title="Authentication" icon="lock" href="/auth/overview">
+    Learn how HTTP Basic auth and roles work
+  </Card>
+</CardGroup>
+
+## What is FLL Backend?
+
+The First Lego League Backend manages the full competition lifecycle:
+
+- **Editions** — Create and advance competition editions through defined states (registration → in-progress → completed)
+- **Teams** — Register teams, assign coaches, and track team statistics
+- **Matches** — Generate match schedules with a constraint ensuring no two teams face each other more than once
+- **Scoring** — Record match results, compute rankings, and expose real-time leaderboards
+- **Volunteers** — Manage judges, referees, and floaters with built-in role conflict validation
+- **Project Rooms** — Assign judges to rooms for scientific project evaluations
+- **Media** — Store references to photos and videos from the event
+
+## Technology Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Spring Boot 4.x |
+| Persistence | Spring Data JPA + PostgreSQL (prod) / H2 (dev/test) |
+| REST | Spring Data REST + HATEOAS (HAL) |
+| API Docs | SpringDoc OpenAPI 3 (`/swagger-ui.html`) |
+| Security | Spring Security (HTTP Basic) |
+| Testing | JUnit 5 + Cucumber 7 (BDD) |
+| Build | Maven 3, Java 21 |
+| Deployment | Docker + Fly.io |
+
+## Key Features
+
+<AccordionGroup>
+  <Accordion title="Edition lifecycle management">
+    Each competition is scoped to an **Edition**. Editions progress through a state machine (e.g., `REGISTRATION_OPEN` → `IN_PROGRESS` → `FINISHED`). Only admins can advance states, and transitions are validated to prevent inconsistent data.
+  </Accordion>
+  <Accordion title="Match generation with rivalry constraints">
+    The match assignment service enforces that no two teams can be scheduled against each other more than once within an edition. Batch assignment and individual assignment endpoints are both available.
+  </Accordion>
+  <Accordion title="Role conflict validation for volunteers">
+    A volunteer cannot hold conflicting roles (e.g., Judge and Referee simultaneously). The API validates this on assignment and returns structured error codes when conflicts are detected.
+  </Accordion>
+  <Accordion title="HAL/HATEOAS hypermedia responses">
+    All resource responses include `_links` following the HAL specification. A HAL Explorer is available at `/explorer` for interactive API navigation.
+  </Accordion>
+  <Accordion title="BDD acceptance tests">
+    34 Cucumber feature files document and verify every major workflow — from user registration and team management to match scoring and leaderboard computation.
+  </Accordion>
+</AccordionGroup>
+
+## Live Deployment
+
+The production API is deployed at `https://spring-template.fly.dev`. The HAL Explorer is accessible at `https://spring-template.fly.dev/explorer`.
+
+<Note>
+  The production deployment requires HTTP Basic authentication. Use the credentials configured by your administrator.
+</Note>

@@ -1,0 +1,77 @@
+---
+title: "Identity"
+description: "Get the currently authenticated user's identity"
+---
+
+The identity endpoint returns the full HAL resource for the currently authenticated user. Use it to verify that login succeeded and to retrieve the user's self URI, which you can then supply as a reference in subsequent requests.
+
+<Note>
+  Authentication is required. The endpoint returns the identity of the principal extracted from the current security context.
+</Note>
+
+## Get current user identity
+
+`GET /identity`
+
+No request body or query parameters are needed.
+
+**Response body**
+
+The response is a Spring Data REST `PersistentEntityResource` for the authenticated `User` entity.
+
+<ResponseField name="id" type="string">
+  Username / login identifier of the user.
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  Email address of the user.
+</ResponseField>
+
+<ResponseField name="_links.self.href" type="string">
+  Canonical URI of the user resource (e.g. `http://localhost:8080/users/admin`). Use this URI when you need to reference the current user in other requests.
+</ResponseField>
+
+<Tabs>
+  <Tab title="Request">
+    ```bash
+    curl -X GET 'http://localhost:8080/identity' \
+      -H 'Accept: application/hal+json' \
+      -u admin:password
+    ```
+  </Tab>
+  <Tab title="Response">
+    ```json
+    {
+      "id": "admin",
+      "email": "admin@fll.cat",
+      "_links": {
+        "self": { "href": "http://localhost:8080/users/admin" },
+        "user": { "href": "http://localhost:8080/users/admin" }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Unauthenticated behaviour
+
+If no valid session or credentials are supplied, Spring Security intercepts the request before it reaches the controller. Depending on your client configuration you will receive either:
+
+- `401 Unauthorized` with a `WWW-Authenticate` header (HTTP Basic), or
+- a redirect to the login form.
+
+The controller itself returns `null` (which maps to `204 No Content`) when the security context contains no principal — this should not occur in normal operation.
+
+## Common use cases
+
+- **Verify login** — call `GET /identity` immediately after authenticating; a `200` response with a populated body confirms the session is active.
+- **Obtain current user URI** — read `_links.self.href` and pass it as a relationship link (e.g. when assigning a resource to the current user).
+
+## User fields reference
+
+| Field | Notes |
+|---|---|
+| `id` | Username; also used as the path segment in `/users/{id}`. |
+| `email` | Unique, validated email address. |
+| `password` | Write-only. Never returned in responses. |
+| `passwordReset` | Write-only. Indicates whether a password reset is pending. |

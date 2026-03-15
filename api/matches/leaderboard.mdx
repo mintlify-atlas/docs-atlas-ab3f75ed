@@ -1,0 +1,128 @@
+---
+title: "Leaderboard"
+description: "View competition rankings and scores"
+---
+
+The leaderboard ranks teams within a competition edition by their total accumulated score. When scores are tied, the ranking falls back to matches played (descending) and then to team name (ascending).
+
+## Get the leaderboard for an edition
+
+`GET /leaderboards/editions/{editionId}`
+
+Returns a paginated, deterministically sorted ranking of all teams in the specified edition.
+
+**Sorting is fixed:** `totalScore DESC` → `matchesPlayed DESC` → `teamName ASC`. You cannot override the sort order.
+
+**Path parameter**
+
+<ParamField path="editionId" type="integer" required>
+  Numeric identifier of the competition edition.
+</ParamField>
+
+**Query parameters**
+
+<ParamField query="page" type="integer" default="0">
+  Zero-based page index. Must be ≥ 0.
+</ParamField>
+
+<ParamField query="size" type="integer" default="10">
+  Number of items per page. Must be between 1 and 100 (inclusive).
+</ParamField>
+
+**Response body**
+
+<ResponseField name="editionId" type="integer">
+  ID of the edition this leaderboard belongs to.
+</ResponseField>
+
+<ResponseField name="page" type="integer">
+  Current page index (zero-based).
+</ResponseField>
+
+<ResponseField name="size" type="integer">
+  Page size used for this response.
+</ResponseField>
+
+<ResponseField name="totalElements" type="integer">
+  Total number of ranked teams across all pages.
+</ResponseField>
+
+<ResponseField name="items" type="array">
+  Leaderboard entries on the current page.
+
+  <Expandable title="Leaderboard item fields">
+    <ResponseField name="position" type="integer">
+      1-based rank of the team on the global leaderboard (accounts for pagination — position 1 is always first overall, not first on the current page).
+    </ResponseField>
+    <ResponseField name="teamId" type="string">
+      Identifier of the team.
+    </ResponseField>
+    <ResponseField name="teamName" type="string">
+      Display name of the team.
+    </ResponseField>
+    <ResponseField name="totalScore" type="integer">
+      Sum of all scores registered for this team in this edition.
+    </ResponseField>
+    <ResponseField name="matchesPlayed" type="integer">
+      Number of matches for which a result has been recorded.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<Tabs>
+  <Tab title="Request">
+    ```bash
+    curl -X GET 'http://localhost:8080/leaderboards/editions/1?page=0&size=10'
+    ```
+  </Tab>
+  <Tab title="Response">
+    ```json
+    {
+      "editionId": 1,
+      "page": 0,
+      "size": 10,
+      "totalElements": 3,
+      "items": [
+        {
+          "position": 1,
+          "teamId": "TeamA",
+          "teamName": "TeamA",
+          "totalScore": 350,
+          "matchesPlayed": 4
+        },
+        {
+          "position": 2,
+          "teamId": "TeamB",
+          "teamName": "TeamB",
+          "totalScore": 280,
+          "matchesPlayed": 4
+        },
+        {
+          "position": 3,
+          "teamId": "TeamC",
+          "teamName": "TeamC",
+          "totalScore": 210,
+          "matchesPlayed": 3
+        }
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Ranking computation
+
+The service aggregates `MatchResult` records for all teams registered in the edition. For each team it sums the `score` values across all their results and counts how many results exist. The query returns rows ordered by:
+
+1. `totalScore` descending — highest scoring team first.
+2. `matchesPlayed` descending — among teams with the same score, the one with more matches played ranks higher.
+3. `teamName` ascending — fully tied teams are sorted alphabetically by name.
+
+The `position` field in each item reflects the team's absolute position in the full ranking, computed as `(page × size) + index + 1`.
+
+## Error responses
+
+| HTTP status | Description |
+|---|---|
+| 400 | `page` < 0 or `size` outside 1–100. |
+| 404 | No edition found with the given `editionId`. |

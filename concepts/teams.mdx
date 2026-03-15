@@ -1,0 +1,100 @@
+---
+title: "Teams"
+description: "Team registration, membership, and coaching"
+---
+
+A **team** is the primary competing unit in the FLL system. Teams are identified by name (their natural key), belong to a city, and compete in a category. They carry roster, coaching, and edition-registration relationships.
+
+## Team fields
+
+| Field | Type | Constraints |
+|---|---|---|
+| `name` | `String` | Primary key; 3–50 characters, required |
+| `city` | `String` | Max 100 characters, required |
+| `foundationYear` | `Integer` | Must be ≥ 1998, required |
+| `educationalCenter` | `String` | Max 100 characters, optional |
+| `category` | `String` | Required, non-blank |
+| `inscriptionDate` | `LocalDate` | Past or present; auto-set to today if not provided |
+
+<Note>
+The team `name` is the primary key. It must be unique across the system and between 3 and 50 characters long.
+</Note>
+
+## Team members
+
+A team can have up to **10 members**. Each member is its own entity linked back to the team.
+
+| Field | Type | Constraints |
+|---|---|---|
+| `id` | `Long` | Auto-generated |
+| `name` | `String` | 2–100 characters, required |
+| `birthDate` | `LocalDate` | Must be in the past, required |
+| `gender` | `String` | Max 20 characters, optional |
+| `tShirtSize` | `String` | Max 10 characters, optional |
+| `role` | `String` | Max 50 characters, required |
+| `team` | `Team` | Owning team (required) |
+
+Members are created by the `TeamMember.create(name, role, birthDate, team)` factory, which automatically calls `team.addMember(member)`. Attempting to add an 11th member throws an error.
+
+## Coaches
+
+A coach is an independent entity with a unique email address who can be assigned to one or more teams.
+
+| Field | Type | Constraints |
+|---|---|---|
+| `id` | `Integer` | Auto-generated |
+| `name` | `String` | Required, non-blank |
+| `emailAddress` | `String` | Valid email, unique across all coaches |
+| `phoneNumber` | `String` | Optional |
+
+### Coach assignment rules
+
+<AccordionGroup>
+  <Accordion title="Maximum coaches per team">
+    A team can have at most **2 coaches**. Calling `team.addCoach(coach)` when 2 are already assigned raises `MAX_COACHES_PER_TEAM_REACHED`.
+  </Accordion>
+
+  <Accordion title="Maximum teams per coach">
+    A coach can train at most **2 teams**. If the coach already trains 2 teams, the call raises `MAX_TEAMS_PER_COACH_REACHED`.
+  </Accordion>
+
+  <Accordion title="Duplicate assignment">
+    Assigning the same coach to a team a second time raises `COACH_ALREADY_ASSIGNED`.
+  </Accordion>
+</AccordionGroup>
+
+## Floaters
+
+A team can be supported by up to **2 floaters** (a type of volunteer — see [Volunteers](/concepts/volunteers)). Floaters can assist multiple teams.
+
+- Adding a third floater to a team raises `"A team cannot have more than 2 floaters"`.
+- Floaters are removed cleanly via `team.removeFloater(floater)`, which keeps both sides of the relationship in sync.
+
+## Registering to an edition
+
+To participate in an edition, a team must be registered to it. Registration is only allowed when the edition is in the `OPEN` state (see [Editions](/concepts/editions)).
+
+The many-to-many relationship is maintained in the `edition_teams` join table. A team can be registered to multiple editions over its lifetime.
+
+```http
+POST /editions/{editionId}/teams
+{ "teamName": "RoboTeam" }
+```
+
+<Warning>
+An edition accepts a maximum of **18 teams**. Registering when the cap has been reached returns a `409 Conflict` with the error code `MAX_TEAMS_REACHED`.
+</Warning>
+
+## Validation summary
+
+| Rule | Detail |
+|---|---|
+| `name` length | 3–50 characters |
+| `city` length | 1–100 characters |
+| `foundationYear` | ≥ 1998 |
+| `inscriptionDate` | Past or present only |
+| Members per team | Maximum 10 |
+| Coaches per team | Maximum 2 |
+| Teams per coach | Maximum 2 |
+| Floaters per team | Maximum 2 |
+| Teams per edition | Maximum 18 |

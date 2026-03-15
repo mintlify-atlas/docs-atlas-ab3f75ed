@@ -1,0 +1,116 @@
+---
+title: "Match scoring"
+description: "Register match scores and results"
+---
+
+Once a match reaches the `FINISHED` state, you can register the final score for both teams. Registering a score creates a `MatchResult` record for each team and triggers a ranking recalculation.
+
+<Note>
+  Authentication is required.
+</Note>
+
+<Warning>
+  You cannot register a score for a match that is not in the `FINISHED` state. The endpoint returns `409 MATCH_NOT_FINISHED` if you attempt to do so.
+</Warning>
+
+## Register a final score
+
+`POST /matchResults/register`
+
+**Request body**
+
+<ParamField body="matchId" type="integer" required>
+  ID of the finished match.
+</ParamField>
+
+<ParamField body="score" type="object" required>
+  Scores for both teams.
+
+  <Expandable title="Score fields">
+    <ParamField body="teamAId" type="string" required>
+      ID (or URI) of the first team.
+    </ParamField>
+    <ParamField body="teamBId" type="string" required>
+      ID (or URI) of the second team. Must differ from `teamAId`.
+    </ParamField>
+    <ParamField body="teamAScore" type="integer" required>
+      Score for team A. Must be ≥ 0.
+    </ParamField>
+    <ParamField body="teamBScore" type="integer" required>
+      Score for team B. Must be ≥ 0.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Response body**
+
+<ResponseField name="matchId" type="integer">
+  ID of the match.
+</ResponseField>
+
+<ResponseField name="resultSaved" type="boolean">
+  `true` when the match result records were persisted successfully.
+</ResponseField>
+
+<ResponseField name="rankingUpdated" type="boolean">
+  `true` when the edition ranking was recalculated after saving the result.
+</ResponseField>
+
+<Tabs>
+  <Tab title="Request">
+    ```bash
+    curl -X POST 'http://localhost:8080/matchResults/register' \
+      -H 'Content-Type: application/json' \
+      -u admin:password \
+      -d '{
+        "matchId": 42,
+        "score": {
+          "teamAId": "RoboStars",
+          "teamBId": "TechWizards",
+          "teamAScore": 120,
+          "teamBScore": 95
+        }
+      }'
+    ```
+  </Tab>
+  <Tab title="Response">
+    ```json
+    {
+      "matchId": 42,
+      "resultSaved": true,
+      "rankingUpdated": true
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## MatchResult entity
+
+Each score registration creates two `MatchResult` records — one per team.
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | integer | auto-generated | Result identifier |
+| `score` | integer | ≥ 0 | Points scored by this team in this match |
+| `match` | reference | not null | The match the result belongs to |
+| `team` | reference | not null | The team this result belongs to |
+
+The combination of `match` + `team` is unique — you cannot register two results for the same team in the same match.
+
+## Validation rules
+
+| Rule | Error code | HTTP status |
+|---|---|---|
+| Both `matchId` and `score` must be present | `INVALID_SCORE_PAYLOAD` | 400 |
+| `score` object must be well-formed JSON | `INVALID_SCORE_PAYLOAD` | 400 |
+| Match must exist | `MATCH_NOT_FOUND` | 404 |
+| Match must be in `FINISHED` state | `MATCH_NOT_FINISHED` | 409 |
+| Match end time must not be before start time | `INVALID_MATCH_STATE` | 409 |
+| A result must not already exist for this match | `RESULT_ALREADY_EXISTS` | 409 |
+| `teamAId` and `teamBId` must match the teams on the match | `TEAM_MISMATCH` | 422 |
+| `teamAId` and `teamBId` must be different | `INVALID_SCORE` | 422 |
+| Scores must be ≥ 0 | `INVALID_SCORE` | 422 |
+
+<Note>
+  Direct `POST /matchResults` (Spring Data REST) is disabled. Always use `POST /matchResults/register`.
+</Note>

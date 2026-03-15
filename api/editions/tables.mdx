@@ -1,0 +1,97 @@
+---
+title: "Edition competition tables"
+description: "Manage competition tables within an edition"
+---
+
+Competition tables are the physical playing surfaces used during an FLL event. Each table is identified by a string label and can host multiple **scheduled** matches. Non-scheduled matches (e.g., matches not yet assigned a time slot) are excluded from the response.
+
+---
+
+## List competition tables for an edition
+
+```
+GET /editions/{editionId}/tables
+```
+
+Returns all competition tables for the given edition, each with the list of scheduled matches assigned to it. Tables from other editions are never included.
+
+**Authentication required.**
+
+### Path parameters
+
+<ParamField path="editionId" type="integer" required>
+  The numeric ID of the edition.
+</ParamField>
+
+### Response
+
+Returns a JSON array. Each element represents one competition table.
+
+<ResponseField name="identifier" type="string" required>
+  The label of the competition table (e.g., `"Table A"`).
+</ResponseField>
+
+<ResponseField name="matches" type="EditionTableMatch[]" required>
+  Scheduled matches assigned to this table.
+  <Expandable title="EditionTableMatch properties">
+    <ResponseField name="matchId" type="integer" required>
+      Unique identifier of the match.
+    </ResponseField>
+    <ResponseField name="startTime" type="string">
+      ISO 8601 start time of the match. `null` if not yet scheduled.
+    </ResponseField>
+    <ResponseField name="endTime" type="string">
+      ISO 8601 end time of the match. `null` if not yet scheduled.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example
+
+<Tabs>
+  <Tab title="Request">
+    ```bash
+    curl http://localhost:8080/editions/1/tables \
+      -u username:password
+    ```
+  </Tab>
+  <Tab title="Response">
+    ```json
+    [
+      {
+        "identifier": "Table A",
+        "matches": [
+          {
+            "matchId": 101,
+            "startTime": "2025-03-15T11:00:00",
+            "endTime": "2025-03-15T11:20:00"
+          },
+          {
+            "matchId": 102,
+            "startTime": "2025-03-15T11:20:00",
+            "endTime": "2025-03-15T11:40:00"
+          }
+        ]
+      }
+    ]
+    ```
+  </Tab>
+</Tabs>
+
+### Empty response
+
+If the edition exists but has no competition tables, the endpoint returns an empty array:
+
+```json
+[]
+```
+
+### Errors
+
+| Error code | HTTP status | Cause |
+|---|---|---|
+| `EDITION_NOT_FOUND` | `404` | No edition exists with the given `editionId`. |
+
+<Note>
+  Only **scheduled** matches appear in the response. A match is considered scheduled when it has been assigned to a competition table. Matches created but not yet assigned to a table are excluded.
+</Note>

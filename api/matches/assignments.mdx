@@ -1,0 +1,249 @@
+---
+title: "Match assignments"
+description: "Assign referees to matches and assign matches to competition tables"
+---
+
+This page covers three assignment operations:
+
+1. **Single referee assignment** — assign one referee to one match.
+2. **Batch referee assignment** — assign referees to every match in a round in one request.
+3. **Table assignment** — assign a competition table (and its time slot) to a specific match.
+
+---
+
+## Single referee assignment
+
+`POST /matchAssignments/assign`
+
+Assigns a referee to a single match. The match must be in `SCHEDULED` or `IN_PROGRESS` state, must not already have a referee, and the referee must not have an overlapping match.
+
+**Request body**
+
+<ParamField body="matchId" type="string" required>
+  Numeric ID of the match (as a string).
+</ParamField>
+
+<ParamField body="refereeId" type="string" required>
+  Numeric ID of the volunteer to assign as referee (as a string).
+</ParamField>
+
+**Response body**
+
+<ResponseField name="matchId" type="string">
+  ID of the match.
+</ResponseField>
+
+<ResponseField name="refereeId" type="string">
+  ID of the assigned referee.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Always `"ASSIGNED"` on success.
+</ResponseField>
+
+<Tabs>
+  <Tab title="Request">
+    ```bash
+    curl -X POST 'http://localhost:8080/matchAssignments/assign' \
+      -H 'Content-Type: application/json' \
+      -u admin:password \
+      -d '{
+        "matchId": "42",
+        "refereeId": "7"
+      }'
+    ```
+  </Tab>
+  <Tab title="Response">
+    ```json
+    {
+      "matchId": "42",
+      "refereeId": "7",
+      "status": "ASSIGNED"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Batch referee assignment
+
+`POST /matchAssignments/batch`
+
+Assigns referees to all matches in a round in a single atomic operation. If any assignment fails, the entire batch is rolled back.
+
+**Request body**
+
+<ParamField body="roundId" type="string" required>
+  Numeric ID of the round (as a string).
+</ParamField>
+
+<ParamField body="assignments" type="array" required>
+  List of match-to-referee pairs. Must not be empty. Each item must contain `matchId` and `refereeId`.
+
+  <Expandable title="Assignment item fields">
+    <ParamField body="matchId" type="string" required>
+      Numeric ID of the match.
+    </ParamField>
+    <ParamField body="refereeId" type="string" required>
+      Numeric ID of the referee volunteer.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+**Response body**
+
+<ResponseField name="roundId" type="string">
+  ID of the round.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Always `"ASSIGNED"` when all assignments succeed.
+</ResponseField>
+
+<ResponseField name="processed" type="integer">
+  Number of assignments processed (equals the number of items in `assignments`).
+</ResponseField>
+
+<ResponseField name="assignments" type="array">
+  Per-match assignment results.
+
+  <Expandable title="Assignment item response fields">
+    <ResponseField name="matchId" type="string">
+      ID of the match.
+    </ResponseField>
+    <ResponseField name="refereeId" type="string">
+      ID of the referee.
+    </ResponseField>
+    <ResponseField name="status" type="string">
+      `"ASSIGNED"` when successful.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<Tabs>
+  <Tab title="Request">
+    ```bash
+    curl -X POST 'http://localhost:8080/matchAssignments/batch' \
+      -H 'Content-Type: application/json' \
+      -u admin:password \
+      -d '{
+        "roundId": "3",
+        "assignments": [
+          { "matchId": "10", "refereeId": "5" },
+          { "matchId": "11", "refereeId": "6" }
+        ]
+      }'
+    ```
+  </Tab>
+  <Tab title="Response">
+    ```json
+    {
+      "roundId": "3",
+      "status": "ASSIGNED",
+      "processed": 2,
+      "assignments": [
+        { "matchId": "10", "refereeId": "5", "status": "ASSIGNED" },
+        { "matchId": "11", "refereeId": "6", "status": "ASSIGNED" }
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  The batch operation is fully transactional. A single validation failure rolls back all assignments in the batch. The response includes error code `BATCH_ASSIGNMENT_FAILED` with a `cause` field indicating the underlying reason.
+</Warning>
+
+---
+
+## Table assignment
+
+`POST /matches/{matchId}/assign-table`
+
+Assigns a competition table (and its associated time slot) to an existing match.
+
+<Note>
+  Authentication is required (`isAuthenticated()`).
+</Note>
+
+**Path parameter**
+
+<ParamField path="matchId" type="integer" required>
+  ID of the match to update.
+</ParamField>
+
+**Request body**
+
+<ParamField body="tableIdentifier" type="string" required>
+  Identifier string of the competition table to assign (e.g. `"TABLE_A"`).
+</ParamField>
+
+**Response body**
+
+<ResponseField name="matchId" type="integer">
+  ID of the match.
+</ResponseField>
+
+<ResponseField name="tableIdentifier" type="string">
+  Identifier of the assigned table.
+</ResponseField>
+
+<ResponseField name="startTime" type="string">
+  Scheduled start time for this table slot.
+</ResponseField>
+
+<ResponseField name="endTime" type="string">
+  Scheduled end time for this table slot.
+</ResponseField>
+
+<Tabs>
+  <Tab title="Request">
+    ```bash
+    curl -X POST 'http://localhost:8080/matches/42/assign-table' \
+      -H 'Content-Type: application/json' \
+      -u admin:password \
+      -d '{"tableIdentifier": "TABLE_A"}'
+    ```
+  </Tab>
+  <Tab title="Response">
+    ```json
+    {
+      "matchId": 42,
+      "tableIdentifier": "TABLE_A",
+      "startTime": "10:00:00",
+      "endTime": "10:30:00"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Error codes
+
+### Referee assignment errors
+
+| HTTP status | Error code | Description |
+|---|---|---|
+| 400 | `INVALID_ID_FORMAT` | `matchId` or `refereeId` is not a valid number. |
+| 404 | `MATCH_NOT_FOUND` | No match exists with the given ID. |
+| 404 | `REFEREE_NOT_FOUND` | No volunteer exists with the given referee ID. |
+| 409 | `MATCH_ALREADY_HAS_REFEREE` | The match already has a referee assigned. |
+| 409 | `AVAILABILITY_CONFLICT` | The referee is already assigned to an overlapping match. |
+| 422 | `INVALID_ROLE` | The volunteer exists but does not have the `Referee` role. |
+| 422 | `INVALID_MATCH_STATE` | The match is `FINISHED` or missing time information. |
+
+### Batch-only errors
+
+| HTTP status | Error code | Description |
+|---|---|---|
+| 404 | `ROUND_NOT_FOUND` | No round exists with the given `roundId`. |
+| 422 | `DUPLICATE_MATCH_IN_BATCH` | The same match ID appears more than once in the batch. |
+
+### Schedule errors (table assignment)
+
+| Error code | Description |
+|---|---|
+| `INVALID_TIME_RANGE` | The table's start time is after its end time. |
+| `TABLE_TIME_OVERLAP` | The table slot overlaps with another already-assigned match. |

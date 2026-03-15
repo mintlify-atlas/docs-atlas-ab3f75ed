@@ -1,0 +1,113 @@
+---
+title: "Matches"
+description: "Match scheduling, states, and assignment constraints"
+---
+
+A **match** represents a single head-to-head game between two teams at a specific competition table during a specific round. Matches carry a time slot, a state, optional team assignments, and an optional referee assignment.
+
+## Match fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `Long` | Auto-generated primary key |
+| `startTime` | `LocalTime` | Match start time (required for assignment) |
+| `endTime` | `LocalTime` | Match end time; must be strictly after `startTime` |
+| `round` | `Round` | The round this match belongs to |
+| `competitionTable` | `CompetitionTable` | The physical table where the match is played |
+| `teamA` | `Team` | First competing team |
+| `teamB` | `Team` | Second competing team |
+| `referee` | `Referee` | The referee overseeing the match |
+| `state` | `MatchState` | Defaults to `SCHEDULED` |
+
+## Match states
+
+Matches move through three states:
+
+| State | Description |
+|---|---|
+| `SCHEDULED` | Match is planned but has not started. Referee assignment is allowed in this state. |
+| `IN_PROGRESS` | Match is currently being played. |
+| `FINISHED` | Match has ended. Score registration is allowed — and required — before the leaderboard updates. |
+
+<Note>
+Referee assignment is blocked for matches in the `FINISHED` state or for matches without a valid time slot (`startTime`/`endTime` must both be set).
+</Note>
+
+## Rounds and competition tables
+
+Every match is associated with two scheduling containers:
+
+- **Round** — A logical grouping of matches within an edition. A round has a unique sequential `number` and belongs to one edition. Rounds own their matches via a one-to-many relationship; removing a match from a round sets the round reference to `null`.
+- **CompetitionTable** — A named physical table at the venue (e.g., `"Table-1"`). Its string `id` is user-defined. A table can hold at most **3 referees** and an unlimited number of matches, subject to the no-overlap constraint.
+
+## Schedule validation
+
+The `MatchScheduleValidationService` enforces two rules whenever a match is created or updated:
+
+1. `startTime` must be strictly before `endTime`.
+2. No two matches on the **same competition table** may have overlapping time slots.
+
+A time overlap on a table returns `409 Conflict` with the error code `TABLE_TIME_OVERLAP`.
+
+## Referee assignment
+
+You can assign a referee to a match in two ways.
+
+<Tabs>
+  <Tab title="Individual assignment">
+    Assigns a single referee to a single match.
+
+    ```http
+    POST /matches/{matchId}/assign-referee
+    { "refereeId": "42" }
+    ```
+
+    The service validates:
+    - The match exists and is not `FINISHED`.
+    - The match has a `startTime` and `endTime`.
+    - The match does not already have a referee.
+    - The volunteer identified by `refereeId` has the `Referee` role (not Judge or Floater).
+    - The referee is not already assigned to another overlapping match.
+  </Tab>
+
+  <Tab title="Batch assignment">
+    Assigns multiple referee–match pairs for an entire round in a single transactional call.
+
+    ```http
+    POST /rounds/{roundId}/assign-referees
+    [
+      { "matchId": "1", "refereeId": "10" },
+      { "matchId": "2", "refereeId": "11" }
+    ]
+    ```
+
+    In addition to the individual checks above, the batch operation also validates:
+    - Every match belongs to the specified round.
+    - Each match appears at most once in the batch (`DUPLICATE_MATCH_IN_BATCH`).
+    - No referee is assigned to two overlapping matches **within the same batch** (`AVAILABILITY_CONFLICT`).
+
+    If any item fails validation the entire batch is rolled back — no partial assignments are persisted.
+  </Tab>
+</Tabs>
+
+### Assignment error codes
+
+| Error code | HTTP status | Cause |
+|---|---|---|
+| `MATCH_NOT_FOUND` | 404 | Match ID does not exist |
+| `REFEREE_NOT_FOUND` | 404 | Volunteer ID does not exist |
+| `INVALID_ROLE` | 422 | Volunteer is not a Referee |
+| `MATCH_ALREADY_HAS_REFEREE` | 409 | Match already assigned |
+| `INVALID_MATCH_STATE` | 422 | Match is `FINISHED` or missing times |
+| `AVAILABILITY_CONFLICT` | 409 | Referee overlap with another match |
+| `DUPLICATE_MATCH_IN_BATCH` | 409 | Same match ID appears twice in a batch |
+| `ROUND_NOT_FOUND` | 404 | Round ID does not exist (batch only) |
+| `INVALID_ID_FORMAT` | 400 | Non-numeric ID supplied |
+
+## The no-same-rival rule
+
+The system is designed so that **a team never faces the same opponent more than once** across an edition. The README explicitly identifies this as a core business invariant when generating match schedules.
+
+<Tip>
+When building a schedule generator on top of this API, track the set of team pairs that have already been matched within an edition and exclude them from future round assignments.
+</Tip>

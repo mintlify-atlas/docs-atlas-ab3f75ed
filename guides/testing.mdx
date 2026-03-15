@@ -1,0 +1,156 @@
+---
+title: "Testing"
+description: "Run and understand the test suite"
+---
+
+## Running tests
+
+<CodeGroup>
+
+```bash Run all tests
+mvn test
+```
+
+```bash Run a specific test class
+mvn test -Dtest=TeamTest
+```
+
+```bash Run a specific Cucumber feature
+mvn test -Dcucumber.features=src/test/resources/features/RegisterUser.feature
+```
+
+</CodeGroup>
+
+## Test types
+
+The test suite has three layers:
+
+<CardGroup cols={3}>
+  <Card title="Unit tests" icon="flask-conical">
+    JUnit 5 tests that validate domain entity logic and constraints in isolation, with no Spring context loaded.
+  </Card>
+  <Card title="Integration tests" icon="layers">
+    Spring Boot tests for controllers and services that verify behaviour across layers with an in-memory database.
+  </Card>
+  <Card title="Acceptance tests" icon="check-circle">
+    Cucumber/BDD tests written in Gherkin that drive the full HTTP stack and assert end-to-end scenarios.
+  </Card>
+</CardGroup>
+
+### Unit tests
+
+Unit tests live under `src/test/java/.../domain/` and `src/test/java/cat/udl/eps/softarch/fll/`. They use JUnit 5 to verify domain rules directly on entity classes — for example, enforcing the 10-member team limit or validating field constraints.
+
+Example classes: `TeamTest`, `TeamMemberTest`, `AwardValidationTest`, `UserValidationTest`, `VenueValidationTest`.
+
+### Integration tests
+
+Integration tests live under `src/test/java/.../controller/` and `src/test/java/.../service/`. They load a Spring context and test behaviour at the controller and service layers.
+
+Example classes: `MatchControllerTest`, `LeaderboardControllerTest`, `MatchAssignmentServiceTest`, `EditionLifecycleServiceTest`.
+
+### Acceptance tests
+
+Acceptance tests use **Cucumber 7.19.0** with `cucumber-spring` to run Gherkin scenarios against a live Spring Boot application context.
+
+## Cucumber setup
+
+### Runner class
+
+The test suite is triggered by `CucumberTest.java`, which uses the JUnit Platform Suite API:
+
+```java
+@Suite
+@ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "cat.udl.eps.softarch.fll.steps")
+@ConfigurationParameter(key = FEATURES_PROPERTY_NAME, value = "src/test/resources/features")
+@ConfigurationParameter(key = PLUGIN_PROPERTY_NAME, value = "pretty")
+class CucumberTest {
+    // Keep this class empty, it is used for triggering the Cucumber tests
+}
+```
+
+| Parameter  | Value                                  | Description                         |
+| ---------- | -------------------------------------- | ----------------------------------- |
+| `glue`     | `cat.udl.eps.softarch.fll.steps`       | Package containing step definitions |
+| `features` | `src/test/resources/features`          | Location of `.feature` files        |
+| `plugin`   | `pretty`                               | Human-readable console output       |
+
+### Step definitions
+
+Step definitions are in `src/test/java/cat/udl/eps/softarch/fll/steps/`. There is one step definition class per feature area, for example:
+
+- `RegisterStepDefs.java`
+- `TeamSteps.java`
+- `MatchAssignmentStepDefs.java`
+- `LeaderboardStepDefs.java`
+- `EditionLifecycleStepDefs.java`
+- `AuthenticationStepDefs.java` — shared authentication steps used across scenarios
+
+## Feature files
+
+The 34 feature files in `src/test/resources/features/` cover the full application domain:
+
+<AccordionGroup>
+  <Accordion title="User management">
+    - `RegisterUser.feature` — user registration flow
+    - `volunteer.feature` — volunteer management
+    - `ManageFloater.feature` — floater volunteer management
+    - `ManageJudge.feature` — judge management
+    - `RefereeManagement.feature` — referee management
+    - `JudgeSearch.feature` — searching for judges
+    - `RefereeSearch.feature` — searching for referees
+    - `Coach.feature` — coach entity
+    - `assign_coach.feature` — assigning coaches to teams
+  </Accordion>
+
+  <Accordion title="Teams and editions">
+    - `team.feature` — team CRUD
+    - `TeamMember.feature` — managing team members
+    - `TeamEditionRegistration.feature` — registering a team to an edition
+    - `ManageEdition.feature` — edition CRUD
+    - `EditionLifecycle.feature` — edition state transitions
+    - `EditionVolunteers.feature` — assigning volunteers to an edition
+    - `EditionCompetitionTables.feature` — linking competition tables to an edition
+  </Accordion>
+
+  <Accordion title="Matches and scoring">
+    - `MatchManagement.feature` — match creation and management
+    - `MatchAssignment.feature` — assigning teams to matches
+    - `MatchScoreRegistration.feature` — recording match scores
+    - `MatchResult.feature` — match result handling
+    - `MatchScheduling.feature` — match schedule management
+    - `MatchTableAssignment.feature` — assigning matches to competition tables
+    - `match-search.feature` — searching matches
+    - `RoundManagement.feature` — round CRUD
+    - `RoundSearchByEdition.feature` — filtering rounds by edition
+    - `Leaderboard.feature` — leaderboard calculation and retrieval
+  </Accordion>
+
+  <Accordion title="Venues and resources">
+    - `ManageVenue.feature` — venue CRUD
+    - `SearchVenue.feature` — searching venues
+    - `CompetitionTable.feature` — competition table management
+    - `ManageScientificProject.feature` — scientific project management
+    - `ManageRecord.feature` — record management
+    - `ManageMediaContent.feature` — media content (photos and videos)
+    - `Award.feature` — award management
+    - `AssignJudge.feature` — assigning judges to project rooms
+  </Accordion>
+</AccordionGroup>
+
+## Test profile
+
+Cucumber tests run with the **`test`** Spring profile (`application-test.yml`). This profile:
+
+- Uses an **H2 in-memory database** so tests are isolated and repeatable
+- Disables or relaxes **Spring Security** to allow unauthenticated access during scenario setup steps
+
+<Note>
+  The H2 console is disabled in the base `application.yml` (`spring.h2.console.enabled: false`). This setting does not affect test execution.
+</Note>
+
+## Cucumber reports
+
+When `CUCUMBER_PUBLISH_ENABLED=true` is set (as in the CI pipeline), test results are published to the Cucumber Reports service. The current report collection is available at:
+
+[https://reports.cucumber.io/report-collections/faed8ca5-e474-4a1a-a72a-b8e2a2cd69f0](https://reports.cucumber.io/report-collections/faed8ca5-e474-4a1a-a72a-b8e2a2cd69f0)

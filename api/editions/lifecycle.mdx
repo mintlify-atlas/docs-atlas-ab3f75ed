@@ -1,0 +1,167 @@
+---
+title: "Edition lifecycle"
+description: "Manage edition state transitions"
+---
+
+Each edition moves through a linear state machine. Only authenticated users can trigger transitions. Attempting an invalid transition returns a `409 Conflict`.
+
+## States
+
+| State | Description |
+|---|---|
+| `DRAFT` | Newly created edition. Team registration is not yet open. |
+| `OPEN` | Team registration is active. Teams can be added to the edition. |
+| `CLOSED` | The edition is closed. No further operations are allowed. |
+
+## Valid transitions
+
+| From | To | Operation |
+|---|---|---|
+| `DRAFT` | `OPEN` | Open the edition for team registration |
+| `OPEN` | `CLOSED` | Close the edition |
+
+<Warning>
+  Transitions are one-way. A `CLOSED` edition cannot be reopened.
+</Warning>
+
+---
+
+## Transition edition state
+
+```
+PATCH /editions/{editionId}/state
+```
+
+Advances the edition to the target state. The target state must be a valid next state from the current state.
+
+**Authentication required.** Any authenticated user can trigger a transition.
+
+### Path parameters
+
+<ParamField path="editionId" type="integer" required>
+  The numeric ID of the edition to update.
+</ParamField>
+
+### Request body
+
+<ParamField body="state" type="string" required>
+  The target state. Must be one of the valid `EditionState` values: `DRAFT`, `OPEN`, `CLOSED`.
+</ParamField>
+
+### Response
+
+<ResponseField name="editionId" type="integer" required>
+  The ID of the updated edition.
+</ResponseField>
+
+<ResponseField name="previousState" type="string" required>
+  The state the edition was in before the transition.
+</ResponseField>
+
+<ResponseField name="newState" type="string" required>
+  The state the edition is in after the transition.
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+  Always `"UPDATED"` on success.
+</ResponseField>
+
+### Example
+
+<Tabs>
+  <Tab title="Request">
+    ```bash
+    curl -X PATCH http://localhost:8080/editions/1/state \
+      -u username:password \
+      -H "Content-Type: application/json" \
+      -d '{"state": "OPEN"}'
+    ```
+  </Tab>
+  <Tab title="Response">
+    ```json
+    {
+      "editionId": 1,
+      "previousState": "DRAFT",
+      "newState": "OPEN",
+      "status": "UPDATED"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Errors
+
+| Error code | HTTP status | Cause |
+|---|---|---|
+| `EDITION_NOT_FOUND` | `404` | No edition exists with the given `editionId`. |
+| `INVALID_EDITION_STATE_TRANSITION` | `409` | The requested target state is not reachable from the current state (e.g., `CLOSED` → `OPEN`). |
+| `INVALID_EDITION_STATE_REQUEST` | `400` | Request body is missing or the `state` value is not a recognised `EditionState`. |
+
+---
+
+## Get edition details
+
+```
+GET /editions/{editionId}
+```
+
+Retrieves a single edition by ID. Returns a HAL+JSON resource.
+
+### Path parameters
+
+<ParamField path="editionId" type="integer" required>
+  The numeric ID of the edition.
+</ParamField>
+
+### Response fields
+
+<ResponseField name="id" type="integer" required>
+  Unique identifier for the edition.
+</ResponseField>
+
+<ResponseField name="year" type="integer" required>
+  The calendar year of the competition edition.
+</ResponseField>
+
+<ResponseField name="venueName" type="string" required>
+  Name of the venue where the edition takes place.
+</ResponseField>
+
+<ResponseField name="description" type="string" required>
+  Free-text description of the edition.
+</ResponseField>
+
+<ResponseField name="state" type="string" required>
+  Current lifecycle state: `DRAFT`, `OPEN`, or `CLOSED`. Read-only — use `PATCH /editions/{editionId}/state` to change it.
+</ResponseField>
+
+<ResponseField name="_links" type="object">
+  HAL hypermedia links to related resources.
+</ResponseField>
+
+### Example
+
+<Tabs>
+  <Tab title="Request">
+    ```bash
+    curl http://localhost:8080/editions/1 \
+      -u username:password
+    ```
+  </Tab>
+  <Tab title="Response">
+    ```json
+    {
+      "id": 1,
+      "year": 2025,
+      "venueName": "Igualada",
+      "description": "FLL 2025",
+      "state": "OPEN",
+      "_links": {
+        "self": { "href": "http://localhost:8080/editions/1" },
+        "edition": { "href": "http://localhost:8080/editions/1" },
+        "teams": { "href": "http://localhost:8080/editions/1/teams" }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>

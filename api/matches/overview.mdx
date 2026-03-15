@@ -1,0 +1,129 @@
+---
+title: "Matches API"
+description: "Manage FLL competition matches"
+---
+
+A match is a scheduled head-to-head game between two teams (`teamA` and `teamB`) played on a competition table during a specific round. Matches are managed through both Spring Data REST endpoints and custom action endpoints.
+
+<Note>
+  Authentication is required for write operations. Read operations are publicly accessible.
+</Note>
+
+## Match fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | integer | Auto-generated match identifier |
+| `startTime` | time (`HH:mm`) | Scheduled start time |
+| `endTime` | time (`HH:mm`) | Scheduled end time |
+| `round` | link | Round this match belongs to |
+| `competitionTable` | link | Table the match is played on |
+| `teamA` | integer | ID of the first team |
+| `teamB` | integer | ID of the second team |
+| `referee` | link | Volunteer assigned as referee |
+| `state` | enum | Current match state (see below) |
+
+## Match states
+
+| Value | Description |
+|---|---|
+| `SCHEDULED` | Match is planned but has not started. |
+| `IN_PROGRESS` | Match is currently being played. |
+| `FINISHED` | Match has ended. Scores can be registered. |
+
+## List matches
+
+`GET /matches`
+
+<Tabs>
+  <Tab title="Request">
+    ```bash
+    curl -X GET 'http://localhost:8080/matches?page=0&size=20' \
+      -H 'Accept: application/hal+json'
+    ```
+  </Tab>
+  <Tab title="Response">
+    ```json
+    {
+      "_embedded": {
+        "matches": [
+          {
+            "startTime": "10:00:00",
+            "endTime": "10:30:00",
+            "teamA": 1,
+            "teamB": 2,
+            "state": "SCHEDULED",
+            "_links": {
+              "self": { "href": "http://localhost:8080/matches/1" },
+              "round": { "href": "http://localhost:8080/matches/1/round" },
+              "competitionTable": { "href": "http://localhost:8080/matches/1/competitionTable" }
+            }
+          }
+        ]
+      },
+      "page": { "size": 20, "totalElements": 1, "totalPages": 1, "number": 0 }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Create a match
+
+`POST /matches`
+
+<ParamField body="startTime" type="string" required>
+  Start time in `HH:mm:ss` format.
+</ParamField>
+
+<ParamField body="endTime" type="string" required>
+  End time in `HH:mm:ss` format.
+</ParamField>
+
+<ParamField body="round" type="string" required>
+  URI of the round this match belongs to (e.g. `"/rounds/1"`).
+</ParamField>
+
+<ParamField body="competitionTable" type="string">
+  URI of the competition table (e.g. `"/competitionTables/A"`).
+</ParamField>
+
+<ParamField body="teamA" type="string">
+  URI of the first team.
+</ParamField>
+
+<ParamField body="teamB" type="string">
+  URI of the second team.
+</ParamField>
+
+```bash
+curl -X POST 'http://localhost:8080/matches' \
+  -H 'Content-Type: application/json' \
+  -u admin:password \
+  -d '{
+    "startTime": "10:00:00",
+    "endTime": "10:30:00",
+    "round": "/rounds/1",
+    "teamA": "/teams/RoboStars",
+    "teamB": "/teams/TechWizards"
+  }'
+```
+
+## Retrieve a match
+
+`GET /matches/{id}`
+
+```bash
+curl -X GET 'http://localhost:8080/matches/42'
+```
+
+## Update a match
+
+`PUT /matches/{id}` or `PATCH /matches/{id}`
+
+## Delete a match
+
+`DELETE /matches/{id}`
+
+<Warning>
+  Deleting a match also removes its associated results. Only delete matches that have not been played.
+</Warning>

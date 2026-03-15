@@ -1,0 +1,96 @@
+---
+title: "Running locally"
+description: "Set up the FLL Backend development environment"
+---
+
+## Prerequisites
+
+Before you begin, make sure you have the following installed:
+
+- **Java 21** — required by the project (`java.version=21` in `pom.xml`)
+- **Maven 3.9+** — the build and lifecycle tool
+- **Git** — to clone the repository
+- **PostgreSQL** (optional) — only needed for the `prod` profile; the default dev mode uses an H2 in-memory database
+
+## Setup
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/UdL-EPS-SoftArch-Igualada/spring-template.git
+    cd spring-template
+    ```
+  </Step>
+
+  <Step title="Build the project">
+    Run the Maven `package` phase to compile sources, run checkstyle, and produce the JAR:
+
+    ```bash
+    mvn package
+    ```
+
+    <Warning>
+      Checkstyle is enforced during the `package` phase using the configuration in `.settings/checkstyle.xml`. The build will fail if any style violations are found. Fix all reported violations before proceeding.
+    </Warning>
+
+    To build without running tests (checkstyle still runs):
+
+    ```bash
+    mvn package -DskipTests
+    ```
+  </Step>
+
+  <Step title="Run the application">
+    Start the Spring Boot application with the Maven plugin:
+
+    ```bash
+    mvn spring-boot:run
+    ```
+
+    The server starts on port **8080** using the H2 in-memory database by default.
+  </Step>
+
+  <Step title="Open the HAL Explorer">
+    Navigate to [http://localhost:8080/explorer](http://localhost:8080/explorer) to browse the HATEOAS API interactively.
+
+    <Tip>
+      The HAL Explorer is the fastest way to explore available resources, follow links between entities, and test authenticated requests — all without a separate HTTP client.
+    </Tip>
+  </Step>
+
+  <Step title="Open the Swagger UI">
+    The OpenAPI documentation is available at [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html). Use it to read endpoint descriptions and try out individual requests.
+  </Step>
+</Steps>
+
+## Using an IDE
+
+You can also run the application directly from your IDE by executing `MainApplication::main`.
+
+If you use **Visual Studio Code**, press `F5` from anywhere in the project to start the application in debug mode.
+
+## Environment configuration
+
+The main configuration lives in `src/main/resources/application.yml`. The settings that affect local development are:
+
+```yaml
+allowed-origins: http://localhost:3000
+default-password: password
+```
+
+| Setting            | Default value             | Description                                                   |
+| ------------------ | ------------------------- | ------------------------------------------------------------- |
+| `allowed-origins`  | `http://localhost:3000`   | CORS origin(s) permitted to call the API                      |
+| `default-password` | `password`                | Password set for pre-seeded default users on startup          |
+
+## Default database
+
+In development mode (no profile active), the application uses an **H2 in-memory database**. Data is reset on every restart. No additional database configuration is required.
+
+## Default user credentials
+
+The application seeds default users on startup. All default users share the password configured in `default-password`:
+
+| Field    | Value      |
+| -------- | ---------- |
+| Password | `password` |

@@ -1,0 +1,150 @@
+---
+title: "User registration"
+description: "Register a new user account"
+---
+
+User registration is the only write operation available to unauthenticated callers. Send a `POST` to `/users` with a JSON body containing a username, email address, and password.
+
+<Note>
+  If you are already authenticated, the registration endpoint returns `403 Forbidden`. You must be logged out to create a new account.
+</Note>
+
+## Endpoint
+
+```
+POST /users
+```
+
+## Request body
+
+| Field | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | string | Required, non-blank | Username. Used as the login identifier and the resource ID at `/users/{id}`. |
+| `email` | string | Required, valid email, unique | Contact email address. Must be unique across all users. |
+| `password` | string | Required, 8–256 characters | Plain-text password. It is BCrypt-encoded before storage and is never returned in responses. |
+
+## Registration walkthrough
+
+<Steps>
+  <Step title="Send the registration request">
+    Post a JSON body with your chosen username, email, and password.
+
+    ```bash
+    curl -X POST https://spring-template.fly.dev/users \
+      -H "Content-Type: application/json" \
+      -d '{
+        "id": "alice",
+        "email": "alice@example.com",
+        "password": "supersecret"
+      }'
+    ```
+  </Step>
+  <Step title="Check the response">
+    A successful registration returns `201 Created` with the new user resource in the body.
+
+    ```json
+    {
+      "id": "alice",
+      "email": "alice@example.com",
+      "_links": {
+        "self": {
+          "href": "https://spring-template.fly.dev/users/alice"
+        },
+        "user": {
+          "href": "https://spring-template.fly.dev/users/alice"
+        }
+      }
+    }
+    ```
+
+    <Note>
+      The `password` field is write-only. It is never included in any response body, even after a successful registration.
+    </Note>
+  </Step>
+  <Step title="Verify you can log in">
+    Call `GET /identity` with your new credentials to confirm the account works.
+
+    ```bash
+    curl -u alice:supersecret https://spring-template.fly.dev/identity
+    ```
+  </Step>
+</Steps>
+
+## Password encoding
+
+Passwords are encoded with **BCrypt** before they are persisted. The raw password you send in the request body is never stored. On every subsequent login, the API compares the provided password against the stored BCrypt hash.
+
+```java
+// From User.java
+public static final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+```
+
+The password field is annotated `@JsonProperty(access = JsonProperty.Access.WRITE_ONLY)`, which means it can be sent in a request but is excluded from all responses.
+
+## Validation errors
+
+If the request body fails validation, the API returns `400 Bad Request` with an error message describing the constraint violation.
+
+<CodeGroup>
+
+```json Empty password (400)
+{
+  "timestamp": "2024-01-15T10:30:00.000+00:00",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "must not be blank"
+}
+```
+
+```json Empty email (400)
+{
+  "timestamp": "2024-01-15T10:30:00.000+00:00",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "must not be blank"
+}
+```
+
+```json Invalid email format (400)
+{
+  "timestamp": "2024-01-15T10:30:00.000+00:00",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "must be a well-formed email address"
+}
+```
+
+```json Password too short (400)
+{
+  "timestamp": "2024-01-15T10:30:00.000+00:00",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "length must be between 8 and 256"
+}
+```
+
+</CodeGroup>
+
+## Conflict errors
+
+If the username or email is already taken, the API returns `409 Conflict`.
+
+```json
+{
+  "timestamp": "2024-01-15T10:30:00.000+00:00",
+  "status": 409,
+  "error": "Conflict",
+  "path": "/users"
+}
+```
+
+Both duplicate usernames and duplicate email addresses produce a `409`.
+
+## Summary of response codes
+
+| Status | Meaning |
+|---|---|
+| `201 Created` | Registration succeeded. |
+| `400 Bad Request` | A field failed validation (blank, invalid email, password out of range). |
+| `403 Forbidden` | The request was sent by an already-authenticated user. |
+| `409 Conflict` | The username or email address is already in use. |

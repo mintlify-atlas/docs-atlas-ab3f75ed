@@ -1,0 +1,95 @@
+---
+title: "Volunteers"
+description: "Volunteer types, roles, and assignment rules"
+---
+
+Volunteers are people who support the running of an edition. Every volunteer is scoped to a single edition and carries common contact information. The base `Volunteer` class is extended by three concrete subtypes: **Judge**, **Referee**, and **Floater**.
+
+## Volunteer hierarchy
+
+```
+Volunteer (abstract)
+├── Judge
+├── Referee
+└── Floater
+```
+
+The inheritance is mapped using JPA `JOINED` strategy — each subtype has its own table (`judge`, `referees`, `floaters`) joined to the shared `volunteers` table.
+
+## Common volunteer fields
+
+| Field | Type | Constraints |
+|---|---|---|
+| `id` | `Long` | Auto-generated primary key |
+| `name` | `String` | Required, non-blank |
+| `emailAddress` | `String` | Valid email format, unique across all volunteers |
+| `phoneNumber` | `String` | Required, non-blank |
+| `edition` | `Edition` | The edition this volunteer belongs to |
+
+## Volunteer types
+
+| Type | Table | Extra fields | Responsibility |
+|---|---|---|---|
+| `Judge` | `judge` | `expert` (boolean), `memberOfRoom` (ProjectRoom) | Evaluates teams in project rooms |
+| `Referee` | `referees` | `expert` (boolean), `supervisesTable` (CompetitionTable) | Oversees matches at a competition table |
+| `Floater` | `floaters` | `studentCode` (unique, required), `assistedTeams` (Set) | Provides flexible support to teams during the event |
+
+### Judge
+
+A judge evaluates teams in a project room setting. Judges can be marked as expert (`expert = true`) and belong to a `ProjectRoom`.
+
+**ProjectRoom** is a venue room identified by a string `roomNumber`. A project room has:
+- One managing judge (`managedByJudge`), referenced via a one-to-one relationship.
+- A list of panelist judges (`panelists`), referenced via one-to-many.
+
+```java
+Judge.create(name, emailAddress, phoneNumber)
+```
+
+### Referee
+
+A referee supervises matches at a competition table. A referee can be assigned to a `CompetitionTable` (via `supervisesTable`). A single table accepts at most **3 referees**.
+
+Referees are assigned to individual matches by the `MatchAssignmentService` (see [Matches](/concepts/matches)). Referees can also be marked as expert.
+
+```java
+Referee.create(name, emailAddress, phoneNumber)
+```
+
+### Floater
+
+A floater is a student volunteer who provides flexible assistance to teams. Each floater has a unique `studentCode`. Floaters are linked to teams via a many-to-many relationship; a team can have at most 2 floaters, but a single floater can assist multiple teams.
+
+```java
+Floater.create(name, emailAddress, phoneNumber, studentCode)
+```
+
+## Edition-scoped management
+
+Every volunteer is linked to exactly one edition through the `edition_id` foreign key on the `volunteers` table. You can retrieve all volunteers for an edition grouped by type:
+
+```http
+GET /editions/{editionId}/volunteers
+```
+
+The response groups volunteers into three lists — `referees`, `judges`, and `floaters` — each containing volunteer summary entries (id, name, email, phone).
+
+<Note>
+Requesting volunteers for a non-existent edition returns `404 Not Found` with error code `EDITION_NOT_FOUND`. Unauthenticated requests return `401 Unauthorized`.
+</Note>
+
+## Role conflict rule
+
+<Warning>
+The `Volunteer` base class is abstract and mapped using single-ID inheritance. Because `emailAddress` is unique across the entire `volunteers` table, the same person **cannot** be registered as both a Judge and a Referee — doing so would require two separate rows with two different email addresses.
+</Warning>
+
+The system enforces role separation at the data model level: each concrete subtype is a distinct database row with its own `id`. If your workflow requires a person to switch roles, delete the existing volunteer record and create a new one with the appropriate subtype.
+
+## Floater assignment constraints summary
+
+| Rule | Limit |
+|---|---|
+| Floaters per team | Maximum 2 |
+| Teams per floater | Unlimited |
+| Referees per table | Maximum 3 |

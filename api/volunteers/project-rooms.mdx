@@ -1,0 +1,119 @@
+---
+title: "Project room assignment"
+description: "Assign judges to project evaluation rooms"
+---
+
+Project rooms host the scientific project evaluation stage of FLL. Each room has exactly one manager judge and up to 3 panelist judges. Use this endpoint to assign a judge to a room in either role.
+
+<Note>
+  Authentication is required.
+</Note>
+
+## Project room fields
+
+| Field | Type | Description |
+|---|---|---|
+| `roomNumber` | string | Unique room identifier (primary key) |
+| `managedByJudge` | link | Judge assigned as room manager (one per room) |
+| `panelists` | collection | Judges assigned as panelists (max 3) |
+
+## Assign a judge to a room
+
+`POST /project-rooms/assign-judge`
+
+Assigns an existing judge to an existing project room as either manager or panelist.
+
+**Request body**
+
+<ParamField body="roomId" type="string" required>
+  Identifier of the project room (e.g. `"ROOM_1"`).
+</ParamField>
+
+<ParamField body="judgeId" type="string" required>
+  Numeric ID of the judge to assign (as a string, e.g. `"10"`).
+</ParamField>
+
+<ParamField body="isManager" type="boolean" required>
+  Set to `true` to assign the judge as room manager; `false` to assign as panelist.
+</ParamField>
+
+**Response body**
+
+<ResponseField name="roomId" type="string">
+  Identifier of the project room.
+</ResponseField>
+
+<ResponseField name="judgeId" type="string">
+  ID of the assigned judge.
+</ResponseField>
+
+<ResponseField name="role" type="string">
+  The role assigned: `"MANAGER"` or `"PANELIST"`.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Always `"ASSIGNED"` on success.
+</ResponseField>
+
+<Tabs>
+  <Tab title="Request — assign manager">
+    ```bash
+    curl -X POST 'http://localhost:8080/project-rooms/assign-judge' \
+      -H 'Content-Type: application/json' \
+      -u admin:password \
+      -d '{
+        "roomId": "ROOM_1",
+        "judgeId": "10",
+        "isManager": true
+      }'
+    ```
+  </Tab>
+  <Tab title="Request — assign panelist">
+    ```bash
+    curl -X POST 'http://localhost:8080/project-rooms/assign-judge' \
+      -H 'Content-Type: application/json' \
+      -u admin:password \
+      -d '{
+        "roomId": "ROOM_2",
+        "judgeId": "20",
+        "isManager": false
+      }'
+    ```
+  </Tab>
+  <Tab title="Response">
+    ```json
+    {
+      "roomId": "ROOM_1",
+      "judgeId": "10",
+      "role": "MANAGER",
+      "status": "ASSIGNED"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Error codes
+
+| HTTP status | Error code | Description |
+|---|---|---|
+| 400 | `INVALID_JUDGE_ID_FORMAT` | `judgeId` is not a valid number. |
+| 400 | `INVALID_ASSIGN_JUDGE_REQUEST` | The request body is malformed or missing required fields. |
+| 404 | `ROOM_NOT_FOUND` | No project room exists with the given `roomId`. |
+| 404 | `JUDGE_NOT_FOUND` | No volunteer with the given `judgeId` exists as a judge. |
+| 409 | `ROOM_ALREADY_HAS_MANAGER` | The room already has a manager. Use `isManager: false` or choose a different room. |
+| 409 | `MAX_PANELISTS_REACHED` | The room already has 3 panelists. No more can be added. |
+| 409 | `JUDGE_ALREADY_ASSIGNED` | The judge is already assigned to this room in any role. |
+
+**Error response shape**
+
+```json
+{
+  "errorCode": "ROOM_ALREADY_HAS_MANAGER",
+  "message": "Room ROOM_1 already has a manager assigned",
+  "path": "/project-rooms/assign-judge"
+}
+```
+
+<Warning>
+  A room can have at most one manager and three panelists. Both constraints are enforced at assignment time.
+</Warning>
